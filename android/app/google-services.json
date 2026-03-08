@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "901839003391",
+    "project_id": "gawein-3742b",
+    "storage_bucket": "gawein-3742b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:901839003391:android:7dbbdc8c37d6b9ed6bf6ca",
+        "android_client_info": {
+          "package_name": "com.example.timtujuh"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAOskenZ5QH3dEKaNY7-jhATJmk-uhjD0o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
