@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:gawein/screens/tambah_lowongan_screen.dart';
+import 'package:gawein/screens/profil_screen.dart';
+import 'package:gawein/screens/detail_lowongan_screen.dart';
 
 class HomeRekruiterScreen extends StatefulWidget {
   const HomeRekruiterScreen({super.key});
@@ -9,51 +13,100 @@ class HomeRekruiterScreen extends StatefulWidget {
 
 class _HomeRekruiterScreenState extends State<HomeRekruiterScreen> {
   int _selectedIndex = 0;
+  String _companyName = 'Perusahaan';
+  String _fullName = 'Perekrut';
+  List<Map<String, dynamic>> _myJobs = [];
+  int _totalApplicants = 0;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    try {
+      // Load profile
+      final profileData = await Supabase.instance.client
+          .from('profiles')
+          .select('full_name, company_name')
+          .eq('id', user.id)
+          .maybeSingle();
+
+      // Load jobs by this recruiter
+      final jobsData = await Supabase.instance.client
+          .from('jobs')
+          .select()
+          .eq('recruiter_id', user.id)
+          .order('created_at', ascending: false);
+
+      final jobs = List<Map<String, dynamic>>.from(jobsData);
+
+      // Count total applicants across all jobs
+      int totalApplicants = 0;
+      if (jobs.isNotEmpty) {
+        for (final job in jobs) {
+          try {
+            final count = await Supabase.instance.client
+                .from('applications')
+                .select('id')
+                .eq('job_id', job['id']);
+            totalApplicants += (count as List).length;
+          } catch (_) {}
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _fullName = profileData?['full_name'] ?? 'Perekrut';
+          _companyName = profileData?['company_name'] ?? 'Perusahaan';
+          _myJobs = jobs;
+          _totalApplicants = totalApplicants;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
+    setState(() => _selectedIndex = index);
   }
 
   @override
   Widget build(BuildContext context) {
+    final List<Widget> pages = [
+      _buildHomeContent(),
+      _buildMyJobsContent(),
+      const ProfilScreen(),
+    ];
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildProfileHeader(),
-              const SizedBox(height: 24),
-              
-              // Kartu Statistik (Pelamar & Penawaran)
-              _buildStatCards(),
-              const SizedBox(height: 24),
-              
-              // Section Lowongan Aktif
-              _buildSectionTitle('Lowongan Aktif', 'Kelola'),
-              _buildActiveJobs(),
-              const SizedBox(height: 24),
-              
-              // Section Wawancara Terdekat
-              _buildSectionTitle('Wawancara Terjadwal', 'Lihat Semua'),
-              _buildUpcomingInterviews(),
-              const SizedBox(height: 32),
-            ],
-          ),
-        ),
-      ),
-      // Tombol Tambah Lowongan (Sesuai PRD)
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          // TODO: Navigasi ke halaman Tambah Lowongan
-        },
-        backgroundColor: Colors.deepPurple,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Lowongan', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      ),
+      body: SafeArea(child: pages[_selectedIndex]),
+      floatingActionButton: _selectedIndex < 2
+          ? FloatingActionButton.extended(
+              onPressed: () async {
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const TambahLowonganScreen()),
+                );
+                if (result == true) _loadData();
+              },
+              backgroundColor: Colors.deepPurple,
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: const Text(
+                'Lowongan Baru',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            )
+          : null,
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         currentIndex: _selectedIndex,
@@ -62,20 +115,106 @@ class _HomeRekruiterScreenState extends State<HomeRekruiterScreen> {
         unselectedItemColor: Colors.grey,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Beranda'),
-          BottomNavigationBarItem(icon: Icon(Icons.people_outline), label: 'Kandidat'),
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_today_outlined), label: 'Jadwal'),
-          BottomNavigationBarItem(icon: Icon(Icons.business), label: 'Profil'),
+          BottomNavigationBarItem(icon: Icon(Icons.work_outline), label: 'Lowongan'),
+          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profil'),
         ],
       ),
     );
   }
 
-  // Header melengkung berwarna gelap (Sama dengan UI Pencari Kerja)
+  Widget _buildHomeContent() {
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildProfileHeader(),
+            const SizedBox(height: 24),
+            _buildStatCards(),
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Lowongan Aktif',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => _selectedIndex = 1),
+                    child: const Text('Lihat Semua', style: TextStyle(color: Colors.deepPurple)),
+                  ),
+                ],
+              ),
+            ),
+            if (_myJobs.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(32),
+                child: Center(
+                  child: Column(
+                    children: [
+                      Icon(Icons.work_off_outlined, size: 64, color: Colors.grey),
+                      SizedBox(height: 12),
+                      Text(
+                        'Belum ada lowongan aktif.\nTap tombol + untuk membuat lowongan baru.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              ..._myJobs.take(3).map((job) => _buildJobCard(job)),
+            const SizedBox(height: 100),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMyJobsContent() {
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+
+    if (_myJobs.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.work_off_outlined, size: 80, color: Colors.grey),
+            SizedBox(height: 16),
+            Text('Belum ada lowongan', style: TextStyle(fontSize: 18, color: Colors.grey)),
+            SizedBox(height: 8),
+            Text(
+              'Tap tombol + untuk membuat\nlowongan pekerjaan baru',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+        itemCount: _myJobs.length,
+        itemBuilder: (context, index) => _buildJobCard(_myJobs[index]),
+      ),
+    );
+  }
+
   Widget _buildProfileHeader() {
     return Container(
       padding: const EdgeInsets.all(24.0),
       decoration: const BoxDecoration(
-        color: Color(0xFF1E1B3A), 
+        color: Color(0xFF1E1B3A),
         borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(30),
           bottomRight: Radius.circular(30),
@@ -94,19 +233,18 @@ class _HomeRekruiterScreenState extends State<HomeRekruiterScreen> {
               const SizedBox(width: 16),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   Text(
-                    'PT. Kopi Mbois Malang', // Placeholder Nama Perusahaan
-                    style: TextStyle(
+                    _companyName,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  SizedBox(height: 4),
                   Text(
-                    'HR Dashboard',
-                    style: TextStyle(color: Colors.white70, fontSize: 14),
+                    _fullName,
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                 ],
               ),
@@ -119,177 +257,178 @@ class _HomeRekruiterScreenState extends State<HomeRekruiterScreen> {
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.notifications_none, color: Colors.white),
-          )
+          ),
         ],
       ),
     );
   }
 
-  // Kartu Rangkuman Statistik Pelamar & Penawaran
   Widget _buildStatCards() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         children: [
-          Expanded(child: _statCard('Pelamar Baru', '12', Icons.group_add, Colors.blue)),
+          Expanded(
+            child: _statCard(
+              'Lowongan Aktif',
+              '${_myJobs.length}',
+              Icons.work_outline,
+              Colors.blue,
+            ),
+          ),
           const SizedBox(width: 16),
-          Expanded(child: _statCard('Menunggu Respon', '3', Icons.pending_actions, Colors.orange)),
+          Expanded(
+            child: _statCard(
+              'Total Pelamar',
+              '$_totalApplicants',
+              Icons.people_outline,
+              Colors.orange,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _statCard(String title, String count, IconData icon, Color color) {
+  Widget _statCard(String label, String value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
+          BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 28),
-          const SizedBox(height: 12),
-          Text(count, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Text(title, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title, String actionText) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          Text(
-            actionText,
-            style: const TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Horizontal List untuk Lowongan yang sedang Aktif
-  Widget _buildActiveJobs() {
-    return SizedBox(
-      height: 140,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-        children: [
-          _activeJobCard('Barista Full-time', '15 Pelamar', true),
-          _activeJobCard('Waiter Part-time', '8 Pelamar', true),
-          _activeJobCard('Kasir', 'Ditutup', false),
-        ],
-      ),
-    );
-  }
-
-  Widget _activeJobCard(String role, String statusText, bool isActive) {
-    return Container(
-      width: 220,
-      margin: const EdgeInsets.symmetric(horizontal: 8.0),
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: isActive ? Colors.deepPurple : Colors.grey.shade300,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              isActive ? 'Aktif' : 'Non-aktif',
-              style: TextStyle(color: isActive ? Colors.white : Colors.black54, fontSize: 10),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(role, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isActive ? Colors.white : Colors.black87)),
+          Icon(icon, color: color, size: 32),
           const SizedBox(height: 8),
-          Text(statusText, style: TextStyle(color: isActive ? Colors.white70 : Colors.black54, fontSize: 12)),
-        ],
-      ),
-    );
-  }
-
-  // Daftar Wawancara Terjadwal ke Bawah
-  Widget _buildUpcomingInterviews() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-      child: Column(
-        children: [
-          _interviewTile('Budi Santoso', 'Barista Full-time', 'Besok, 10:00 WIB'),
-          const SizedBox(height: 12),
-          _interviewTile('Siska Andini', 'Waiter Part-time', 'Senin, 13:00 WIB'),
-        ],
-      ),
-    );
-  }
-
-  Widget _interviewTile(String name, String role, String time) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        children: [
-          const CircleAvatar(
-            radius: 24,
-            backgroundColor: Colors.blueGrey,
-            child: Icon(Icons.person, color: Colors.white),
+          Text(
+            value,
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: color),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                Text('Melamar: $role', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                const SizedBox(height: 4),
-                Row(
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.grey, fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildJobCard(Map<String, dynamic> job) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 2,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => DetailLowonganScreen(jobData: job)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurple.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.work, color: Colors.deepPurple),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.access_time, size: 14, color: Colors.deepPurple),
-                    const SizedBox(width: 4),
-                    Text(time, style: const TextStyle(color: Colors.deepPurple, fontSize: 12, fontWeight: FontWeight.bold)),
+                    Text(
+                      job['title'] ?? '-',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      job['company_name'] ?? '-',
+                      style: const TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
+                    if (job['salary'] != null && (job['salary'] as String).isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          job['salary'],
+                          style: const TextStyle(
+                            color: Colors.green,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              PopupMenuButton<String>(
+                onSelected: (value) async {
+                  if (value == 'delete') {
+                    await _deleteJob(job['id'].toString());
+                  }
+                },
+                itemBuilder: (_) => [
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline, color: Colors.red),
+                        SizedBox(width: 8),
+                        Text('Hapus Lowongan'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.check_circle_outline, color: Colors.green),
-            tooltip: 'Tandai Selesai (Mark as Done)',
-            onPressed: () {
-               // TODO: Logika untuk "Mark as Done" sesuai PRD
-            },
-          )
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteJob(String jobId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hapus Lowongan?'),
+        content: const Text('Lowongan ini akan dihapus secara permanen.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Batal')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+          ),
         ],
       ),
     );
+
+    if (confirmed != true) return;
+
+    try {
+      await Supabase.instance.client.from('jobs').delete().eq('id', jobId);
+      await _loadData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Lowongan berhasil dihapus'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal menghapus: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 }

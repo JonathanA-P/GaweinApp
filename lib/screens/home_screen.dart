@@ -5,8 +5,8 @@ import 'kursus_scren.dart';
 import 'komunitas_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gawein/screens/tambah_lowongan_screen.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:gawein/screens/detail_lowongan_screen.dart';
+import 'package:gawein/screens/home_rekruiter_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,9 +17,10 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
-  String? _role; // Variabel baru untuk peran
-  bool _isLoading = true; // Variabel baru untuk status loading
-  String _fullName = 'User'; // Default jika nama tidak ditemukan
+  String? _role;
+  String _fullName = 'User GaweIn';
+  bool _isLoading = true;
+  Future<List<dynamic>>? _jobsFuture;
 
   void _onItemTapped(int index) {
     setState(() {
@@ -30,48 +31,64 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _checkUserRole(); // Panggil fungsi cek peran saat startup
+    _checkUserRole();
+    _jobsFuture = Supabase.instance.client
+        .from('jobs')
+        .select()
+        .order('created_at', ascending: false)
+        .limit(5);
   }
 
 Future<void> _checkUserRole() async {
     final user = Supabase.instance.client.auth.currentUser;
-    if (user != null) {
-      // Tambahkan 'full_name' di bagian select
+    if (user == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+    try {
       final data = await Supabase.instance.client
           .from('profiles')
-          .select('role, full_name') 
+          .select('role, full_name')
           .eq('id', user.id)
-          .single();
-      
+          .maybeSingle();
+
+      if (!mounted) return;
+
+      final role = data?['role'];
+      // Recruiters should always use their dedicated screen
+      if (role == 'perekrut') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const HomeRekruiterScreen()),
+        );
+        return;
+      }
+
       setState(() {
-        _role = data['role'];
-        _fullName = data['full_name'] ?? 'User GaweIn'; // <-- SIMPAN NAMA DI SINI
+        _role = role;
+        _fullName = data?['full_name'] ?? 'User GaweIn';
         _isLoading = false;
       });
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
 @override
   Widget build(BuildContext context) {
-    // Tampilkan loading spinner jika data peran belum siap
-    if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
-    final List<Widget> pages = [
-      // Jika perekrut, tampilkan konten perekrut. Jika bukan, tampilkan konten Alfredo yang lama.
-      _role == 'perekrut' ? _buildPerekrutContent() : _buildHomeContent(), 
-      const CariKerjaScreen(),
-      const KursusScreen(),
-      const KomunitasScreen(),
-      const ProfilScreen(), 
+    // INI YANG BARU: Daftar halaman untuk Bottom Navigation
+    final List<Widget> _pages = [
+      _buildHomeContent(), // Index 0: Beranda
+      const CariKerjaScreen(), // Index 1: Halaman Cari Kerja yang baru kita buat
+      const KursusScreen(), // Index 2: Placeholder Course
+      const KomunitasScreen(), // Index 3: Placeholder Komunitas
+      const ProfilScreen(),
     ];
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      // INI YANG BARU: Body sekarang berubah dinamis berdasarkan index yang diklik
       body: SafeArea(
-        child: pages[_selectedIndex], 
+        child: _pages[_selectedIndex],
       ),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
@@ -90,8 +107,17 @@ Future<void> _checkUserRole() async {
     );
   }
 
-  // --- KONTEN BERANDA KITA PINDAHKAN KE METHOD INI ---
   Widget _buildHomeContent() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    // Show recruiter content if role is perekrut
+    if (_role == 'perekrut') {
+      return _buildPerekrutContent();
+    }
+
+    // Default content for job seekers
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -111,7 +137,8 @@ Future<void> _checkUserRole() async {
       ),
     );
   }
-  
+
+
   Widget _buildProfileHeader() {
     return Container(
       padding: const EdgeInsets.all(24.0),
@@ -125,29 +152,38 @@ Future<void> _checkUserRole() async {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+
           Row(
             children: [
+
               const CircleAvatar(
                 radius: 28,
                 backgroundColor: Colors.grey,
                 child: Icon(Icons.person, color: Colors.white, size: 32),
               ),
+
               const SizedBox(width: 16),
+
               Column(
-               crossAxisAlignment: CrossAxisAlignment.start,
-               children: [
-               const Text('Good morning', style: TextStyle(color: Colors.white70, fontSize: 14)),
-               const SizedBox(height: 4),
-               Text(_fullName, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-  ],
-),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Good morning', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                  const SizedBox(height: 4),
+                  Text(_fullName, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              ),
             ],
           ),
+
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), shape: BoxShape.circle),
-            child: const Icon(Icons.notifications_none, color: Colors.white),
+            decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                shape: BoxShape.circle),
+            child: const Icon(Icons.notifications_none,
+                color: Colors.white),
           )
+
         ],
       ),
     );
@@ -159,8 +195,14 @@ Future<void> _checkUserRole() async {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const Text('See All', style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.w600)),
+          Text(title,
+              style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold)),
+          const Text('See All',
+              style: TextStyle(
+                  color: Colors.deepPurple,
+                  fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -185,14 +227,21 @@ Future<void> _checkUserRole() async {
       width: 280,
       margin: const EdgeInsets.symmetric(horizontal: 8.0),
       padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          Text(title,
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16)),
           const SizedBox(height: 8),
-          Text(subtitle, style: TextStyle(color: Colors.black.withOpacity(0.6))),
+          Text(subtitle,
+              style: TextStyle(
+                  color: Colors.black.withOpacity(0.6))),
         ],
       ),
     );
@@ -202,104 +251,57 @@ Future<void> _checkUserRole() async {
   // TAHAP 1: FITUR CARI PEKERJAAN (DARI SUPABASE)
   // ==========================================
   Widget _buildJobRecommendations() {
-    return SizedBox(
-      height: 160,
-      child: FutureBuilder<List<Map<String, dynamic>>>(
-        // Mengambil data dari tabel 'jobs' Supabase
-        future: Supabase.instance.client.from('jobs').select().order('created_at', ascending: false),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
-          }
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text('Belum ada lowongan kerja.', style: TextStyle(color: Colors.grey)));
-          }
-
-          final jobs = snapshot.data!;
-          return ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            itemCount: jobs.length,
-            itemBuilder: (context, index) {
-              final job = jobs[index];
-              return _jobCard(
-                job['title'] ?? 'Posisi Tidak Diketahui',
-                job['company_name'] ?? 'Perusahaan Rahasia',
-                job['salary'] ?? 'Gaji Dirahasiakan',
-                Icons.work,
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-
-  // ==========================================
-  // TAHAP 3: FITUR COURSE (DARI YOUTUBE API)
-  // ==========================================
-  Future<List<dynamic>> _fetchYouTubeCourses() async {
-    // Catatan: Ganti 'YOUR_API_KEY' dengan API Key asli dari Google Cloud Console kamu
-    const apiKey = 'YOUR_API_KEY'; 
-    const query = 'belajar programming flutter indonesia'; // Kata kunci pencarian
-    const url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=3&q=$query&type=video&key=$apiKey';
-
-    try {
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return data['items']; // Mengembalikan daftar video
-      }
-    } catch (e) {
-      debugPrint('Error fetch YouTube: $e');
-    }
-    return []; // Kembalikan list kosong jika gagal (API key belum diatur)
-  }
-
-  Widget _buildCourseRecommendations() {
     return FutureBuilder<List<dynamic>>(
-      future: _fetchYouTubeCourses(),
+      future: _jobsFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const SizedBox(
+            height: 160,
+            child: Center(child: CircularProgressIndicator()),
+          );
         }
-        
-        final videos = snapshot.data ?? [];
-        
-        // Fallback jika API Key belum dipasang atau error
-        if (videos.isEmpty) {
+        if (!snapshot.hasData || (snapshot.data as List).isEmpty) {
           return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-            child: Column(
-              children: [
-                _courseListTile('Java OOP Masterclass (Mock)', 'Data dummy karena API Key kosong', Icons.code),
-              ],
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Center(
+                child: Text('Belum ada lowongan tersedia.', style: TextStyle(color: Colors.grey)),
+              ),
             ),
           );
         }
-
-        // Tampilkan video asli dari YouTube
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-          child: Column(
-            children: videos.map((video) {
-              final snippet = video['snippet'];
-              final title = snippet['title'].toString().replaceAll('&quot;', '"'); // Rapikan teks
-              final channel = snippet['channelTitle'];
-              return Column(
-                children: [
-                  _courseListTile(title, channel, Icons.play_circle_fill),
-                  const SizedBox(height: 12),
-                ],
+        final jobs = snapshot.data as List;
+        return SizedBox(
+          height: 175,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            itemCount: jobs.length,
+            itemBuilder: (context, index) {
+              final job = jobs[index] as Map<String, dynamic>;
+              return _jobCard(
+                job['title'] ?? '-',
+                job['company_name'] ?? '-',
+                job['salary'] ?? '-',
+                Icons.work_outline,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => DetailLowonganScreen(jobData: job)),
+                ),
               );
-            }).toList(),
+            },
           ),
         );
       },
     );
   }
 
-  Widget _jobCard(String role, String company, String salary, IconData icon) {
+  Widget _jobCard(String role, String company, String salary, IconData icon, {VoidCallback? onTap}) {
     return Container(
       width: 240,
       margin: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -337,7 +339,7 @@ Future<void> _checkUserRole() async {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () {},
+              onPressed: onTap,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.deepPurple,
                 foregroundColor: Colors.white,
@@ -351,6 +353,18 @@ Future<void> _checkUserRole() async {
     );
   }
 
+  Widget _buildCourseRecommendations() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+      child: Column(
+        children: [
+          _courseListTile('Java OOP Masterclass', 'Belajar fundamental PBO', Icons.code),
+          const SizedBox(height: 12),
+          _courseListTile('AI/ML Engineering Basics', 'Pengenalan Machine Learning', Icons.memory),
+        ],
+      ),
+    );
+  }
 
   Widget _courseListTile(String title, String subtitle, IconData icon) {
     return Container(

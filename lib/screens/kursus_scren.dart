@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class KursusScreen extends StatefulWidget {
   const KursusScreen({super.key});
@@ -10,8 +11,8 @@ class KursusScreen extends StatefulWidget {
 }
 
 class _KursusScreenState extends State<KursusScreen> {
-  // --- MASUKKAN API KEY YOUTUBE KAMU DI SINI ---
-  final String apiKey = 'AIzaSyAv1_9HipZkIgNF_dhwvucHu7ixkle4lxg'; 
+  // Read YouTube API key from .env
+  final String apiKey = dotenv.env['YOUTUBE_API_KEY'] ?? '';
 
   List<dynamic> _myCourses = [];
   List<dynamic> _popularCourses = [];

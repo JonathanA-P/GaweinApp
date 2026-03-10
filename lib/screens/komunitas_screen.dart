@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class KomunitasScreen extends StatefulWidget {
   const KomunitasScreen({super.key});
@@ -8,40 +9,123 @@ class KomunitasScreen extends StatefulWidget {
 }
 
 class _KomunitasScreenState extends State<KomunitasScreen> {
-  // Dummy data untuk feed komunitas
-  final List<Map<String, dynamic>> _posts = [
-    {
-      "name": "Siska Andini",
-      "role": "Pencari Kerja",
-      "time": "2 jam yang lalu",
-      "content": "Halo teman-teman, adakah yang tahu info loker part-time di daerah Suhat Malang untuk mahasiswa? Preferensi F&B atau barista. Terima kasih sebelumnya! 🙏",
-      "hasImage": false,
-      "likes": 12,
-      "comments": 5,
-      "avatarColor": Colors.orange,
-    },
-    {
-      "name": "HR Kopi Mbois",
-      "role": "Perwakilan Perusahaan",
-      "time": "5 jam yang lalu",
-      "content": "Tips buat teman-teman yang mau melamar sebagai Waiter/Barista: Pastikan kalian menonjolkan pengalaman organisasi atau pelayanan yang pernah kalian ikuti. Sikap ramah dan komunikatif itu nomor satu! Semangat kerjanya 💪",
-      "hasImage": true,
-      "imageUrl": "https://via.placeholder.com/400x200.png?text=Tips+Interview+Kerja", // Placeholder gambar
-      "likes": 48,
-      "comments": 14,
-      "avatarColor": Colors.blue,
-    },
-    {
-      "name": "Budi Santoso",
-      "role": "Pekerja Gudang",
-      "time": "1 hari yang lalu",
-      "content": "Kemarin habis ikut kursus Manajemen Logistik Dasar dari GaweIn, materinya daging banget buat yang mau ngelamar jadi staff gudang. Rekomen banget buat kalian ambil mumpung gratis!",
-      "hasImage": false,
-      "likes": 24,
-      "comments": 2,
-      "avatarColor": Colors.green,
+  final _postController = TextEditingController();
+  List<Map<String, dynamic>> _posts = [];
+  bool _isLoading = true;
+  bool _isPosting = false;
+  String? _currentUserName;
+  String? _currentUserRole;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  @override
+  void dispose() {
+    _postController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    try {
+      // Load current user profile
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        final profileData = await Supabase.instance.client
+            .from('profiles')
+            .select('full_name, role')
+            .eq('id', user.id)
+            .maybeSingle();
+        _currentUserName = profileData?['full_name'] ?? 'User GaweIn';
+        _currentUserRole = profileData?['role'] == 'perekrut'
+            ? 'Perwakilan Perusahaan'
+            : 'Pencari Kerja';
+      }
+
+      // Load posts from Supabase
+      final postsData = await Supabase.instance.client
+          .from('community_posts')
+          .select()
+          .order('created_at', ascending: false)
+          .limit(20);
+
+      if (mounted) {
+        setState(() {
+          _posts = List<Map<String, dynamic>>.from(postsData);
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      // Fallback to empty list if table doesn't exist yet
+      if (mounted) {
+        setState(() {
+          _posts = [];
+          _isLoading = false;
+        });
+      }
     }
-  ];
+  }
+
+  Future<void> _createPost() async {
+    if (_postController.text.trim().isEmpty) return;
+
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    setState(() => _isPosting = true);
+    try {
+      await Supabase.instance.client.from('community_posts').insert({
+        'user_id': user.id,
+        'author_name': _currentUserName ?? 'User GaweIn',
+        'author_role': _currentUserRole ?? 'Pencari Kerja',
+        'content': _postController.text.trim(),
+        'likes_count': 0,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+      _postController.clear();
+      await _loadData();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Postingan berhasil dipublikasikan!'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal posting: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isPosting = false);
+    }
+  }
+
+  Future<void> _likePost(Map<String, dynamic> post) async {
+    try {
+      final currentLikes = (post['likes_count'] ?? 0) as int;
+      await Supabase.instance.client
+          .from('community_posts')
+          .update({'likes_count': currentLikes + 1}).eq('id', post['id']);
+      await _loadData();
+    } catch (_) {}
+  }
+
+  String _timeAgo(String? createdAt) {
+    if (createdAt == null) return '';
+    final now = DateTime.now();
+    final created = DateTime.parse(createdAt).toLocal();
+    final diff = now.difference(created);
+
+    if (diff.inMinutes < 1) return 'Baru saja';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} menit yang lalu';
+    if (diff.inHours < 24) return '${diff.inHours} jam yang lalu';
+    return '${diff.inDays} hari yang lalu';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,98 +144,123 @@ class _KomunitasScreenState extends State<KomunitasScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search, color: Colors.deepPurple),
-            onPressed: () {},
-          ),
-          IconButton(
-            icon: const Icon(Icons.bookmark_border, color: Colors.deepPurple),
-            onPressed: () {},
+            icon: const Icon(Icons.refresh, color: Colors.deepPurple),
+            onPressed: _loadData,
           ),
         ],
       ),
       body: Column(
         children: [
-          // Section "Upload Bar" (Sesuai PRD)
-          _buildCreatePostSection(),
-          
-          // Section Feed Komunitas
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.only(top: 8, bottom: 20),
-              itemCount: _posts.length,
-              itemBuilder: (context, index) {
-                final post = _posts[index];
-                return _buildPostCard(post);
-              },
+          // Create Post Section
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.all(16.0),
+            margin: const EdgeInsets.only(bottom: 8.0),
+            child: Column(
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: Colors.deepPurple,
+                      child: Text(
+                        (_currentUserName ?? 'U')[0].toUpperCase(),
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: _postController,
+                        maxLines: 3,
+                        minLines: 1,
+                        decoration: InputDecoration(
+                          hintText: 'Tanya atau berbagi seputar dunia kerja...',
+                          hintStyle: TextStyle(color: Colors.grey.shade500),
+                          border: InputBorder.none,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    ElevatedButton(
+                      onPressed: _isPosting ? null : _createPost,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.deepPurple,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                      ),
+                      child: _isPosting
+                          ? const SizedBox(
+                              height: 16,
+                              width: 16,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : const Text('Post'),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-        ],
-      ),
-    );
-  }
 
-  // Widget untuk membuat postingan baru
-  Widget _buildCreatePostSection() {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.all(16.0),
-      margin: const EdgeInsets.only(bottom: 8.0),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              const CircleAvatar(
-                radius: 20,
-                backgroundColor: Colors.deepPurple,
-                child: Icon(Icons.person, color: Colors.white),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  decoration: InputDecoration(
-                    hintText: 'Tanya seputar dunia kerja...',
-                    hintStyle: TextStyle(color: Colors.grey.shade500),
-                    border: InputBorder.none,
-                  ),
-                ),
-              ),
-            ],
+          // Posts Feed
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _posts.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.forum_outlined, size: 80, color: Colors.grey.shade300),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'Belum ada postingan.\nJadi yang pertama berbagi!',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.grey, fontSize: 16),
+                            ),
+                          ],
+                        ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _loadData,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.only(bottom: 20),
+                          itemCount: _posts.length,
+                          itemBuilder: (context, index) =>
+                              _buildPostCard(_posts[index]),
+                        ),
+                      ),
           ),
-          const Divider(),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // Upload Foto Button (Sesuai Constraint: Hanya Foto)
-              TextButton.icon(
-                onPressed: () {
-                  // Aksi upload foto
-                },
-                icon: const Icon(Icons.image_outlined, color: Colors.green),
-                label: const Text('Foto', style: TextStyle(color: Colors.grey)),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  // Aksi Post
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                ),
-                child: const Text('Post'),
-              ),
-            ],
-          )
         ],
       ),
     );
   }
 
-  // Widget untuk Card setiap Postingan
   Widget _buildPostCard(Map<String, dynamic> post) {
+    final name = post['author_name'] ?? 'User';
+    final role = post['author_role'] ?? '';
+    final content = post['content'] ?? '';
+    final likes = post['likes_count'] ?? 0;
+    final time = _timeAgo(post['created_at']);
+    final avatarColors = [
+      Colors.orange,
+      Colors.blue,
+      Colors.green,
+      Colors.purple,
+      Colors.red,
+    ];
+    final avatarColor = avatarColors[name.hashCode % avatarColors.length];
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8.0),
       color: Colors.white,
@@ -159,14 +268,13 @@ class _KomunitasScreenState extends State<KomunitasScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header Postingan (Avatar, Nama, Waktu)
           Row(
             children: [
               CircleAvatar(
                 radius: 20,
-                backgroundColor: post['avatarColor'],
+                backgroundColor: avatarColor,
                 child: Text(
-                  post['name'][0], 
+                  name[0].toUpperCase(),
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ),
@@ -175,91 +283,42 @@ class _KomunitasScreenState extends State<KomunitasScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      post['name'],
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
+                    Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                     Row(
                       children: [
-                        Text(
-                          post['role'],
-                          style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                        ),
-                        const SizedBox(width: 4),
-                        const Text('•', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                        const SizedBox(width: 4),
-                        Text(
-                          post['time'],
-                          style: const TextStyle(color: Colors.grey, fontSize: 12),
-                        ),
+                        Text(role, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                        if (time.isNotEmpty) ...[
+                          const Text(' • ', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                          Text(time, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                        ],
                       ],
                     ),
                   ],
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.more_horiz, color: Colors.grey),
-                onPressed: () {},
-              )
             ],
           ),
           const SizedBox(height: 12),
-          
-          // Caption / Text Bar
-          Text(
-            post['content'],
-            style: const TextStyle(fontSize: 14, height: 1.4),
-          ),
-          
-          // Opsional Foto
-          if (post['hasImage']) ...[
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.network(
-                post['imageUrl'],
-                width: double.infinity,
-                height: 200,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  width: double.infinity,
-                  height: 200,
-                  color: Colors.grey.shade200,
-                  child: const Icon(Icons.image, size: 50, color: Colors.grey),
-                ),
-              ),
-            ),
-          ],
-          
+          Text(content, style: const TextStyle(fontSize: 14, height: 1.5)),
           const SizedBox(height: 12),
-          const Divider(),
-          
-          // Action Buttons (Like & Comment)
+          const Divider(height: 1),
+          const SizedBox(height: 8),
           Row(
             children: [
-              InkWell(
-                onTap: () {},
+              GestureDetector(
+                onTap: () => _likePost(post),
                 child: Row(
                   children: [
-                    const Icon(Icons.favorite_border, color: Colors.grey, size: 20),
-                    const SizedBox(width: 6),
-                    Text('${post['likes']}', style: const TextStyle(color: Colors.grey)),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 24),
-              InkWell(
-                onTap: () {},
-                child: Row(
-                  children: [
-                    const Icon(Icons.chat_bubble_outline, color: Colors.grey, size: 20),
-                    const SizedBox(width: 6),
-                    Text('${post['comments']}', style: const TextStyle(color: Colors.grey)),
+                    Icon(Icons.favorite_border, size: 20, color: Colors.grey.shade600),
+                    const SizedBox(width: 4),
+                    Text('$likes', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                    const SizedBox(width: 4),
+                    Text('Suka', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                   ],
                 ),
               ),
             ],
-          )
+          ),
         ],
       ),
     );

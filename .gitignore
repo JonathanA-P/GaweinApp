@@ -1,3 +1,12 @@
+# Environment / secrets — NEVER commit these
+.env
+
+# Firebase config files (not used — project uses Supabase)
+google-services.json
+GoogleService-Info.plist
+firebase.json
+lib/firebase_options.dart
+
 # Miscellaneous
 *.class
 *.log

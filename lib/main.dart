@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:gawein/blocs/auth/auth_bloc.dart';
-import 'package:gawein/screens/splash_screen.dart'; // Kita mulai dari SplashScreen
+import 'package:gawein/screens/splash_screen.dart';
 
 Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await dotenv.load(fileName: '.env');
+
   await Supabase.initialize(
-    url: 'https://dvdeblchlvgvuzrhbego.supabase.co',
-    anonKey: 'sb_publishable_9KJErR2X4YQVFBJkmcjuRw_EAzQsoGh',
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
-  runApp(MyApp());
+
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -17,7 +23,6 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 2. Bungkus aplikasi dengan MultiBlocProvider agar BLoC Auth bisa dipakai di mana saja
     return MultiBlocProvider(
       providers: [
         BlocProvider<AuthBloc>(
@@ -31,7 +36,7 @@ class MyApp extends StatelessWidget {
           primarySwatch: Colors.deepPurple,
           scaffoldBackgroundColor: Colors.white,
         ),
-        home: const SplashScreen(), // Pintu masuk pertama aplikasi
+        home: const SplashScreen(),
       ),
     );
   }

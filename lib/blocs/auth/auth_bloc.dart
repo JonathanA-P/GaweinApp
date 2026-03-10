@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState;
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:gawein/models/user_model.dart';
 // Pakai import relatif agar tidak bentrok
 import 'auth_event.dart';
@@ -23,7 +24,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(AuthLoading());
     try {
       // 1. Konfigurasi Google Sign In
-      const webClientId = 'MASUKKAN_WEB_CLIENT_ID_KAMU.apps.googleusercontent.com';
+      final webClientId = dotenv.env['GOOGLE_WEB_CLIENT_ID'] ?? '';
       
       final googleSignIn = GoogleSignIn(serverClientId: webClientId);
       final googleUser = await googleSignIn.signIn();

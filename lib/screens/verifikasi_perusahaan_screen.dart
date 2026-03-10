@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:gawein/screens/home_rekruiter_screen.dart'; // <-- Ini sudah dibuka kuncinya
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:gawein/screens/home_rekruiter_screen.dart';
 
 class VerifikasiPerusahaanScreen extends StatefulWidget {
   const VerifikasiPerusahaanScreen({super.key});
@@ -10,6 +11,61 @@ class VerifikasiPerusahaanScreen extends StatefulWidget {
 
 class _VerifikasiPerusahaanScreenState extends State<VerifikasiPerusahaanScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _namaPerusahaanController = TextEditingController();
+  final _bidangIndustriController = TextEditingController();
+  final _nomorTeleponController = TextEditingController();
+  final _alamatController = TextEditingController();
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _namaPerusahaanController.dispose();
+    _bidangIndustriController.dispose();
+    _nomorTeleponController.dispose();
+    _alamatController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submitVerification() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        await Supabase.instance.client.from('profiles').upsert({
+          'id': user.id,
+          'company_name': _namaPerusahaanController.text.trim(),
+          'industry': _bidangIndustriController.text.trim(),
+          'phone': _nomorTeleponController.text.trim(),
+          'address': _alamatController.text.trim(),
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Selamat datang sebagai Perekrut di GaweIn! 🎉'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const HomeRekruiterScreen()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal menyimpan: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +86,6 @@ class _VerifikasiPerusahaanScreenState extends State<VerifikasiPerusahaanScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
               const Text(
                 'Verifikasi Perusahaan',
                 style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.deepPurple),
@@ -41,65 +96,51 @@ class _VerifikasiPerusahaanScreenState extends State<VerifikasiPerusahaanScreen>
                 style: TextStyle(fontSize: 14, color: Colors.grey.shade600, height: 1.5),
               ),
               const SizedBox(height: 32),
-
-              // Form Input
-              _buildTextField('Nama Perusahaan', 'Contoh: PT. GaweIn Sukses', Icons.business),
+              _buildTextField(
+                'Nama Perusahaan',
+                'Contoh: PT. GaweIn Sukses',
+                Icons.business,
+                _namaPerusahaanController,
+              ),
               const SizedBox(height: 16),
-              _buildTextField('Bidang Industri', 'Contoh: F&B / Retail / Teknologi', Icons.category_outlined),
+              _buildTextField(
+                'Bidang Industri',
+                'Contoh: F&B / Retail / Teknologi',
+                Icons.category_outlined,
+                _bidangIndustriController,
+              ),
               const SizedBox(height: 16),
-              _buildTextField('Nomor Telepon Perusahaan', 'Contoh: 021-xxxxxx', Icons.phone_outlined, isNumber: true),
+              _buildTextField(
+                'Nomor Telepon Perusahaan',
+                'Contoh: 021-xxxxxx',
+                Icons.phone_outlined,
+                _nomorTeleponController,
+                isNumber: true,
+              ),
               const SizedBox(height: 16),
-              _buildTextField('Alamat Lengkap Perusahaan', 'Masukkan alamat lengkap', Icons.location_on_outlined, maxLines: 3),
-              const SizedBox(height: 24),
-
-              // Bagian Upload Dokumen
-              const Text('Dokumen Legalitas (NIB / SIUP)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 32),
-                decoration: BoxDecoration(
-                  color: Colors.deepPurple.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.deepPurple.shade200, style: BorderStyle.solid),
-                ),
-                child: Column(
-                  children: const [
-                    Icon(Icons.upload_file, size: 40, color: Colors.deepPurple),
-                    SizedBox(height: 12),
-                    Text('Upload Dokumen', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple)),
-                    SizedBox(height: 4),
-                    Text('Format PDF/JPG/PNG, max 5MB', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                  ],
-                ),
+              _buildTextField(
+                'Alamat Lengkap Perusahaan',
+                'Masukkan alamat lengkap',
+                Icons.location_on_outlined,
+                _alamatController,
+                maxLines: 3,
               ),
               const SizedBox(height: 40),
-
-              // Tombol Submit
               SizedBox(
                 width: double.infinity,
                 height: 55,
                 child: ElevatedButton(
-                  onPressed: () {
-                    if (_formKey.currentState!.validate()) {
-                      
-                      // <-- INI BAGIAN NAVIGASI YANG SUDAH DIBUKA KUNCINYA -->
-                      Navigator.pushReplacement(
-                        context, 
-                        MaterialPageRoute(builder: (context) => const HomeRekruiterScreen()),
-                      );
-                      
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Verifikasi Berhasil Dikirim!')),
-                      );
-                    }
-                  },
+                  onPressed: _isLoading ? null : _submitVerification,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.deepPurple,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    elevation: 2,
                   ),
-                  child: const Text('Kirim Verifikasi', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
+                          'Kirim Verifikasi',
+                          style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
                 ),
               ),
             ],
@@ -109,20 +150,26 @@ class _VerifikasiPerusahaanScreenState extends State<VerifikasiPerusahaanScreen>
     );
   }
 
-  Widget _buildTextField(String label, String hint, IconData icon, {bool isNumber = false, int maxLines = 1}) {
+  Widget _buildTextField(
+    String label,
+    String hint,
+    IconData icon,
+    TextEditingController controller, {
+    bool isNumber = false,
+    int maxLines = 1,
+  }) {
     return TextFormField(
-      keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+      controller: controller,
+      keyboardType: isNumber ? TextInputType.phone : TextInputType.text,
       maxLines: maxLines,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        alignLabelWithHint: maxLines > 1,
-        prefixIcon: maxLines == 1 ? Icon(icon, color: Colors.grey) : null,
+        prefixIcon: Icon(icon),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         filled: true,
         fillColor: Colors.grey.shade50,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.deepPurple, width: 2)),
+        alignLabelWithHint: maxLines > 1,
       ),
       validator: (value) => (value == null || value.isEmpty) ? '$label tidak boleh kosong' : null,
     );

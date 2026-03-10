@@ -6,8 +6,9 @@ import 'package:gawein/blocs/auth/auth_state.dart';
 import 'package:gawein/screens/register_screen.dart';
 import 'package:gawein/screens/forgot_password_screen.dart';
 import 'package:gawein/screens/pilih_peran_screen.dart';
-import 'package:gawein/screens/home_screen.dart'; // Tambahan import Home Screen
-import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState; // Tambahan import Supabase
+import 'package:gawein/screens/home_screen.dart';
+import 'package:gawein/screens/home_rekruiter_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState;
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,12 +19,10 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  
-  // --- TAMBAHAN CONTROLLER BARU ---
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _isLoading = false;
   bool _isPasswordVisible = false;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -32,21 +31,42 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  // --- FUNGSI PROSES LOGIN BARU ---
+  /// Called after Google Sign In or email login to route user based on their role.
+  Future<void> _routeAuthenticatedUser(BuildContext context, String userId) async {
+    try {
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select('role')
+          .eq('id', userId)
+          .maybeSingle();
+      if (!context.mounted) return;
+      final role = data?['role'];
+      if (role == 'perekrut') {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeRekruiterScreen()));
+      } else if (role != null) {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
+      } else {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PilihPeranScreen()));
+      }
+    } catch (_) {
+      if (context.mounted) {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PilihPeranScreen()));
+      }
+    }
+  }
+
   Future<void> _prosesLogin() async {
-    if (!_formKey.currentState!.validate()) return; // Cek apakah form kosong
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
     
     try {
-      // 1. Mencoba login ke Supabase
       final response = await Supabase.instance.client.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
 
       if (response.user != null && mounted) {
-        // 2. Cek apakah user ini sudah memilih peran di tabel profiles
         final data = await Supabase.instance.client
             .from('profiles')
             .select('role')
@@ -56,13 +76,16 @@ class _LoginScreenState extends State<LoginScreen> {
         if (!mounted) return;
 
         if (data == null || data['role'] == null) {
-          // Jika profil belum ada atau role kosong, lempar ke Pilih Peran
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => const PilihPeranScreen()),
           );
+        } else if (data['role'] == 'perekrut') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const HomeRekruiterScreen()),
+          );
         } else {
-          // Jika role sudah ada, langsung ke Home Screen
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => const HomeScreen()),
@@ -98,10 +121,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 SnackBar(content: Text(state.message), backgroundColor: Colors.red),
               );
             } else if (state is AuthAuthenticated) {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const PilihPeranScreen()),
-              );
+              _routeAuthenticatedUser(context, state.user.id);
             }
           },
           child: Center(
@@ -120,9 +140,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     key: _formKey,
                     child: Column(
                       children: [
-                        // Email Field
                         TextFormField(
-                          controller: _emailController, // Dipasangkan dengan controller
+                          controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
                           decoration: InputDecoration(
                             labelText: 'Email',
@@ -135,9 +154,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 20),
                         
-                        // Password Field
                         TextFormField(
-                          controller: _passwordController, // Dipasangkan dengan controller
+                          controller: _passwordController,
                           obscureText: !_isPasswordVisible,
                           decoration: InputDecoration(
                             labelText: 'Password',
@@ -162,12 +180,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 24),
                         
-                        // Tombol Login Email Biasa
                         SizedBox(
                           width: double.infinity,
                           height: 55,
                           child: ElevatedButton(
-                            onPressed: _isLoading ? null : _prosesLogin, // Memanggil fungsi login baru
+                            onPressed: _isLoading ? null : _prosesLogin,
                             style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                             child: _isLoading 
                                 ? const CircularProgressIndicator(color: Colors.white)
@@ -176,7 +193,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 24),
 
-                        // Tombol Login dengan Google
                         BlocBuilder<AuthBloc, AuthState>(
                           builder: (context, state) {
                             if (state is AuthLoading) {

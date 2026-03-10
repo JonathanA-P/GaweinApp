@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:gawein/screens/login_screen.dart';
 
 class ProfilScreen extends StatefulWidget {
   const ProfilScreen({super.key});
@@ -8,28 +10,70 @@ class ProfilScreen extends StatefulWidget {
 }
 
 class _ProfilScreenState extends State<ProfilScreen> {
-  // Controller untuk tanggal lahir agar bisa diisi lewat kalender
+  final TextEditingController _namaController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _nikController = TextEditingController();
   final TextEditingController _dobController = TextEditingController();
+
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    loadUserData();
+  }
+
+  @override
+  void dispose() {
+    _namaController.dispose();
+    _emailController.dispose();
+    _nikController.dispose();
+    _dobController.dispose();
+    super.dispose();
+  }
+
+  Future<void> loadUserData() async {
+    final user = Supabase.instance.client.auth.currentUser;
+
+    if (user == null) {
+      setState(() => isLoading = false);
+      return;
+    }
+
+    try {
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select()
+          .eq('id', user.id)
+          .maybeSingle();
+
+      if (data != null && mounted) {
+        _namaController.text = data['full_name'] ?? '';
+        _emailController.text = user.email ?? '';
+        _nikController.text = data['nik'] ?? '';
+        _dobController.text = data['tanggal_lahir'] ?? '';
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading data: $e')),
+        );
+      }
+    }
+
+    if (mounted) {
+      setState(() => isLoading = false);
+    }
+  }
 
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: DateTime(2005, 1, 1), // Default tahun
+      initialDate: DateTime(2005, 1, 1),
       firstDate: DateTime(1950),
       lastDate: DateTime.now(),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Colors.deepPurple,
-              onPrimary: Colors.white,
-              onSurface: Colors.black,
-            ),
-          ),
-          child: child!,
-        );
-      },
     );
+
     if (picked != null) {
       setState(() {
         _dobController.text = "${picked.day}/${picked.month}/${picked.year}";
@@ -37,8 +81,58 @@ class _ProfilScreenState extends State<ProfilScreen> {
     }
   }
 
+  Future<void> _saveProfile() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    setState(() => isLoading = true);
+
+    try {
+      await Supabase.instance.client.from('profiles').update({
+        'full_name': _namaController.text,
+        'nik': _nikController.text,
+        'tanggal_lahir': _dobController.text,
+      }).eq('id', user.id);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Profil berhasil disimpan'),
+              backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+
+    if (mounted) {
+      setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> _logout() async {
+    await Supabase.instance.client.auth.signOut();
+    if (mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       body: SingleChildScrollView(
@@ -54,133 +148,70 @@ class _ProfilScreenState extends State<ProfilScreen> {
                     'Informasi Pribadi',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 16),
-                  _buildTextField('Nama Lengkap', 'Masukkan nama lengkap'),
-                  _buildTextField('Alamat Email', 'email@contoh.com', isEmail: true),
-                  _buildTextField('Nomor Telepon', '+62 8...', isPhone: true),
-                  _buildTextField('Tempat Lahir', 'Masukkan kota kelahiran'),
-                  
-                  // Field Tanggal Lahir dengan DatePicker
-                  TextFormField(
-                    controller: _dobController,
-                    readOnly: true,
-                    onTap: () => _selectDate(context),
-                    decoration: InputDecoration(
-                      labelText: 'Tanggal Lahir',
-                      hintText: 'Pilih tanggal lahir',
-                      suffixIcon: const Icon(Icons.calendar_today, color: Colors.grey),
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  _buildTextField('Alamat Rumah (Domisili)', 'Masukkan alamat lengkap'),
-                  
-                  // Dropdown Jenis Kelamin
-                  DropdownButtonFormField<String>(
-                    decoration: InputDecoration(
-                      labelText: 'Jenis Kelamin',
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                    ),
-                    items: ['Laki-laki', 'Perempuan'].map((String value) {
-                      return DropdownMenuItem<String>(
-                        value: value,
-                        child: Text(value),
-                      );
-                    }).toList(),
-                    onChanged: (newValue) {},
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Jenjang Pendidikan dengan nama instansi
-                  _buildTextField('Jenjang Pendidikan & Instansi', 'Contoh: S1 Teknik Informatika - Universitas Brawijaya'),
-                  _buildTextField('Keahlian / Skill', 'Contoh: Java, Desain Grafis'),
-                  
                   const SizedBox(height: 24),
-                  const Text(
-                    'Dokumen Pendukung',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
+                  _buildTextField('Nama Lengkap', _namaController),
                   const SizedBox(height: 16),
-                  
-                  // Upload e-KTP Container
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.deepPurple.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.deepPurple.shade200, style: BorderStyle.solid),
-                    ),
-                    child: Column(
-                      children: const [
-                        Icon(Icons.credit_card, size: 40, color: Colors.deepPurple),
-                        SizedBox(height: 8),
-                        Text('Upload e-KTP', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple)),
-                        SizedBox(height: 4),
-                        Text('Format JPG/PNG, max 2MB', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                      ],
-                    ),
-                  ),
-                  
+                  _buildTextField('Email', _emailController, enabled: false),
+                  const SizedBox(height: 16),
+                  _buildTextField('NIK', _nikController),
+                  const SizedBox(height: 16),
+                  _buildDateField(),
                   const SizedBox(height: 32),
                   SizedBox(
                     width: double.infinity,
-                    height: 55,
+                    height: 50,
                     child: ElevatedButton(
-                      onPressed: () {
-                        // TODO: Save Profile Action
-                      },
+                      onPressed: _saveProfile,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.deepPurple,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
-                      child: const Text('Simpan Perubahan', style: TextStyle(fontSize: 16, color: Colors.white)),
+                      child: const Text(
+                        'Simpan Perubahan',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
-                    child: TextButton(
-                      onPressed: () {
-                        // TODO: Logout Action
-                      },
-                      child: const Text('Keluar Akun', style: TextStyle(color: Colors.red)),
+                    height: 50,
+                    child: OutlinedButton(
+                      onPressed: _logout,
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.red),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'Logout',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red,
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
-            )
+            ),
           ],
         ),
       ),
     );
   }
 
-  // Header melengkung berwarna ungu gelap
   Widget _buildProfileHeader() {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.only(top: 60, bottom: 40),
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
       decoration: const BoxDecoration(
         color: Color(0xFF1E1B3A),
         borderRadius: BorderRadius.only(
@@ -189,66 +220,57 @@ class _ProfilScreenState extends State<ProfilScreen> {
         ),
       ),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Stack(
-            children: [
-              const CircleAvatar(
-                radius: 50,
-                backgroundColor: Colors.grey,
-                child: Icon(Icons.person, size: 50, color: Colors.white),
-              ),
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(
-                    color: Colors.deepPurple,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
-                ),
-              )
-            ],
+          const CircleAvatar(
+            radius: 50,
+            backgroundColor: Colors.white,
+            child: Icon(Icons.person, size: 50, color: Color(0xFF1E1B3A)),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Lengkapi Profil Anda',
-            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+          Text(
+            _namaController.text.isEmpty ? 'User GaweIn' : _namaController.text,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Agar perusahaan mudah mengenali Anda',
-            style: TextStyle(color: Colors.white70, fontSize: 14),
+          Text(
+            _emailController.text,
+            style: const TextStyle(fontSize: 14, color: Colors.white70),
           ),
         ],
       ),
     );
   }
 
-  // Helper widget untuk membuat text field yang seragam
-  Widget _buildTextField(String label, String hint, {bool isEmail = false, bool isPhone = false}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: TextFormField(
-        keyboardType: isEmail ? TextInputType.emailAddress : (isPhone ? TextInputType.phone : TextInputType.text),
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: hint,
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey.shade300),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey.shade300),
-          ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        ),
+  Widget _buildTextField(String label, TextEditingController controller,
+      {bool enabled = true}) {
+    return TextFormField(
+      controller: controller,
+      enabled: enabled,
+      decoration: InputDecoration(
+        labelText: label,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        filled: true,
+        fillColor: enabled ? Colors.white : Colors.grey[200],
       ),
+    );
+  }
+
+  Widget _buildDateField() {
+    return TextFormField(
+      controller: _dobController,
+      readOnly: true,
+      decoration: InputDecoration(
+        labelText: 'Tanggal Lahir',
+        suffixIcon: const Icon(Icons.calendar_today),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        filled: true,
+        fillColor: Colors.white,
+      ),
+      onTap: () => _selectDate(context),
     );
   }
 }
