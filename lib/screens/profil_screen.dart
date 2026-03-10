@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gawein/screens/login_screen.dart';
+import 'package:image_picker/image_picker.dart';
 
 class ProfilScreen extends StatefulWidget {
   const ProfilScreen({super.key});
@@ -14,6 +15,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _nikController = TextEditingController();
   final TextEditingController _dobController = TextEditingController();
+  String? _avatarUrl;
 
   bool isLoading = true;
 
@@ -48,10 +50,13 @@ class _ProfilScreenState extends State<ProfilScreen> {
           .maybeSingle();
 
       if (data != null && mounted) {
-        _namaController.text = data['full_name'] ?? '';
+        final nameFromProfile = data['full_name'] as String?;
+        final nameFromMeta = user.userMetadata?['full_name'] as String?;
+        _namaController.text = (nameFromProfile?.isNotEmpty == true ? nameFromProfile : nameFromMeta) ?? '';
         _emailController.text = user.email ?? '';
         _nikController.text = data['nik'] ?? '';
         _dobController.text = data['tanggal_lahir'] ?? '';
+        _avatarUrl = data['avatar_url'] as String?;
       }
     } catch (e) {
       if (mounted) {
@@ -78,6 +83,56 @@ class _ProfilScreenState extends State<ProfilScreen> {
       setState(() {
         _dobController.text = "${picked.day}/${picked.month}/${picked.year}";
       });
+    }
+  }
+
+  Future<void> _pickAndUploadImage() async {
+    final picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (image == null) return;
+
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    setState(() => isLoading = true);
+    try {
+      final bytes = await image.readAsBytes();
+      final fileExt = image.path.split('.').last.toLowerCase();
+      final fileName = '${user.id}/avatar.$fileExt';
+
+      await Supabase.instance.client.storage
+          .from('avatars')
+          .uploadBinary(fileName, bytes,
+              fileOptions: const FileOptions(upsert: true));
+
+      final publicUrl = Supabase.instance.client.storage
+          .from('avatars')
+          .getPublicUrl(fileName);
+
+      await Supabase.instance.client
+          .from('profiles')
+          .update({'avatar_url': publicUrl}).eq('id', user.id);
+
+      if (mounted) {
+        setState(() {
+          _avatarUrl = publicUrl;
+          isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Foto profil berhasil diperbarui! 🎉'),
+              backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Gagal upload foto: $e'),
+              backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -221,10 +276,32 @@ class _ProfilScreenState extends State<ProfilScreen> {
       ),
       child: Column(
         children: [
-          const CircleAvatar(
-            radius: 50,
-            backgroundColor: Colors.white,
-            child: Icon(Icons.person, size: 50, color: Color(0xFF1E1B3A)),
+          GestureDetector(
+            onTap: _pickAndUploadImage,
+            child: Stack(
+              children: [
+                CircleAvatar(
+                  radius: 50,
+                  backgroundColor: Colors.white,
+                  backgroundImage: _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
+                  child: _avatarUrl == null
+                      ? const Icon(Icons.person, size: 50, color: Color(0xFF1E1B3A))
+                      : null,
+                ),
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: const BoxDecoration(
+                      color: Colors.deepPurple,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.camera_alt, size: 16, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 16),
           Text(

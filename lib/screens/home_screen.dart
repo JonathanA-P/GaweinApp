@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:gawein/screens/cari_kerja_screen.dart'; 
 import 'profil_screen.dart';
@@ -7,6 +8,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gawein/screens/tambah_lowongan_screen.dart';
 import 'package:gawein/screens/detail_lowongan_screen.dart';
 import 'package:gawein/screens/home_rekruiter_screen.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,8 +23,11 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   String? _role;
   String _fullName = 'User GaweIn';
+  String? _avatarUrl;
   bool _isLoading = true;
   Future<List<dynamic>>? _jobsFuture;
+  Future<List<dynamic>>? _communityFuture;
+  Future<List<dynamic>>? _coursesFuture;
 
   void _onItemTapped(int index) {
     setState(() {
@@ -37,6 +44,12 @@ class _HomeScreenState extends State<HomeScreen> {
         .select()
         .order('created_at', ascending: false)
         .limit(5);
+    _communityFuture = Supabase.instance.client
+        .from('community_posts')
+        .select()
+        .order('created_at', ascending: false)
+        .limit(5);
+    _coursesFuture = _fetchYouTubeCourses();
   }
 
 Future<void> _checkUserRole() async {
@@ -48,7 +61,7 @@ Future<void> _checkUserRole() async {
     try {
       final data = await Supabase.instance.client
           .from('profiles')
-          .select('role, full_name')
+          .select('role, full_name, avatar_url')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -66,12 +79,39 @@ Future<void> _checkUserRole() async {
 
       setState(() {
         _role = role;
-        _fullName = data?['full_name'] ?? 'User GaweIn';
+        _fullName = (data?['full_name'] as String?)?.isNotEmpty == true
+            ? data!['full_name']
+            : (user.userMetadata?['full_name'] as String?) ?? 'User GaweIn';
+        _avatarUrl = data?['avatar_url'] as String?;
         _isLoading = false;
       });
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  Future<List<dynamic>> _fetchYouTubeCourses() async {
+    final apiKey = dotenv.env['YOUTUBE_API_KEY'] ?? '';
+    if (apiKey.isEmpty) return [];
+    final url =
+        'https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=5&q=tutorial+pemrograman+kerja+indonesia&type=video&key=$apiKey';
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['items'] ?? [];
+      }
+    } catch (e) {
+      debugPrint('Error fetch YouTube: $e');
+    }
+    return [];
   }
 
 @override
@@ -156,10 +196,13 @@ Future<void> _checkUserRole() async {
           Row(
             children: [
 
-              const CircleAvatar(
+              CircleAvatar(
                 radius: 28,
                 backgroundColor: Colors.grey,
-                child: Icon(Icons.person, color: Colors.white, size: 32),
+                backgroundImage: _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
+                child: _avatarUrl == null
+                    ? const Icon(Icons.person, color: Colors.white, size: 32)
+                    : null,
               ),
 
               const SizedBox(width: 16),
@@ -167,7 +210,7 @@ Future<void> _checkUserRole() async {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Good morning', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                  Text(_getGreeting(), style: const TextStyle(color: Colors.white70, fontSize: 14)),
                   const SizedBox(height: 4),
                   Text(_fullName, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                 ],
@@ -211,13 +254,37 @@ Future<void> _checkUserRole() async {
   Widget _buildCommunityThreads() {
     return SizedBox(
       height: 120,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-        children: [
-          _communityCard('Tanya Jawab Interview', 'Tips lolos interview F&B...', Colors.blue.shade100),
-          _communityCard('Sharing Info Loker', 'Ada loker helper gudang di Suhat...', Colors.purple.shade100),
-        ],
+      child: FutureBuilder<List<dynamic>>(
+        future: _communityFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final posts = snapshot.data ?? [];
+          if (posts.isEmpty) {
+            return ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              children: [
+                _communityCard('Belum ada thread', 'Jadilah yang pertama berdiskusi!', Colors.blue.shade100),
+              ],
+            );
+          }
+          final colors = [Colors.blue.shade100, Colors.purple.shade100, Colors.green.shade100, Colors.orange.shade100];
+          return ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            itemCount: posts.length,
+            itemBuilder: (context, index) {
+              final post = posts[index] as Map<String, dynamic>;
+              return _communityCard(
+                post['author_name'] ?? 'User GaweIn',
+                post['content'] ?? '',
+                colors[index % colors.length],
+              );
+            },
+          );
+        },
       ),
     );
   }
@@ -356,45 +423,83 @@ Future<void> _checkUserRole() async {
   Widget _buildCourseRecommendations() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-      child: Column(
-        children: [
-          _courseListTile('Java OOP Masterclass', 'Belajar fundamental PBO', Icons.code),
-          const SizedBox(height: 12),
-          _courseListTile('AI/ML Engineering Basics', 'Pengenalan Machine Learning', Icons.memory),
-        ],
+      child: FutureBuilder<List<dynamic>>(
+        future: _coursesFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final courses = snapshot.data ?? [];
+          if (courses.isEmpty) {
+            return Column(
+              children: [
+                _courseListTile('Java OOP Masterclass', 'Belajar fundamental PBO', Icons.code, null),
+                const SizedBox(height: 12),
+                _courseListTile('AI/ML Engineering Basics', 'Pengenalan Machine Learning', Icons.memory, null),
+              ],
+            );
+          }
+          return Column(
+            children: List.generate(
+              courses.length > 3 ? 3 : courses.length,
+              (index) {
+                final item = courses[index] as Map<String, dynamic>;
+                final snippet = item['snippet'] as Map<String, dynamic>;
+                final videoId = (item['id'] as Map<String, dynamic>?)?['videoId'] as String? ?? '';
+                final title = snippet['title'].toString().replaceAll('&quot;', '"').replaceAll('&#39;', "'");
+                final channel = snippet['channelTitle'] as String? ?? '';
+                final youtubeUrl = videoId.isNotEmpty ? 'https://www.youtube.com/watch?v=$videoId' : null;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _courseListTile(title, channel, Icons.play_circle_outline, youtubeUrl),
+                );
+              },
+            ),
+          );
+        },
       ),
     );
   }
 
-  Widget _courseListTile(String title, String subtitle, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))],
-      ),
-      child: Row(
-        children: [
-          Container(
-            height: 60,
-            width: 60,
-            decoration: BoxDecoration(color: Colors.deepPurple.shade50, borderRadius: BorderRadius.circular(8)),
-            child: Icon(icon, color: Colors.deepPurple, size: 30),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-              ],
+  Widget _courseListTile(String title, String subtitle, IconData icon, String? youtubeUrl) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: youtubeUrl != null
+          ? () => launchUrl(Uri.parse(youtubeUrl), mode: LaunchMode.externalApplication)
+          : null,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))],
+        ),
+        child: Row(
+          children: [
+            Container(
+              height: 60,
+              width: 60,
+              decoration: BoxDecoration(color: Colors.deepPurple.shade50, borderRadius: BorderRadius.circular(8)),
+              child: Icon(icon, color: Colors.deepPurple, size: 30),
             ),
-          ),
-          const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-        ],
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 4),
+                  Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+            Icon(
+              youtubeUrl != null ? Icons.play_circle_outline : Icons.arrow_forward_ios,
+              size: youtubeUrl != null ? 24 : 16,
+              color: youtubeUrl != null ? Colors.red : Colors.grey,
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class KomunitasScreen extends StatefulWidget {
@@ -15,6 +17,7 @@ class _KomunitasScreenState extends State<KomunitasScreen> {
   bool _isPosting = false;
   String? _currentUserName;
   String? _currentUserRole;
+  XFile? _selectedImage;
 
   @override
   void initState() {
@@ -28,29 +31,57 @@ class _KomunitasScreenState extends State<KomunitasScreen> {
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 75);
+    if (image != null && mounted) setState(() => _selectedImage = image);
+  }
+
+  Future<String?> _uploadPostImage(String userId) async {
+    if (_selectedImage == null) return null;
     try {
-      // Load current user profile
+      final bytes = await _selectedImage!.readAsBytes()
+          .timeout(const Duration(seconds: 30));
+      final ext = _selectedImage!.path.split('.').last.toLowerCase();
+      final fileName = '$userId/${DateTime.now().millisecondsSinceEpoch}.$ext';
+      await Supabase.instance.client.storage
+          .from('post-images')
+          .uploadBinary(fileName, bytes,
+              fileOptions: const FileOptions(upsert: true))
+          .timeout(const Duration(seconds: 30));
+      return Supabase.instance.client.storage
+          .from('post-images')
+          .getPublicUrl(fileName);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _loadData({bool showSpinner = true}) async {
+    if (showSpinner && mounted) setState(() => _isLoading = true);
+    try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null) {
         final profileData = await Supabase.instance.client
             .from('profiles')
             .select('full_name, role')
             .eq('id', user.id)
-            .maybeSingle();
-        _currentUserName = profileData?['full_name'] ?? 'User GaweIn';
+            .maybeSingle()
+            .timeout(const Duration(seconds: 10));
+        final name = profileData?['full_name'] as String?;
+        final meta = user.userMetadata?['full_name'] as String?;
+        _currentUserName = (name?.isNotEmpty == true ? name : meta) ?? 'User GaweIn';
         _currentUserRole = profileData?['role'] == 'perekrut'
             ? 'Perwakilan Perusahaan'
             : 'Pencari Kerja';
       }
 
-      // Load posts from Supabase
       final postsData = await Supabase.instance.client
           .from('community_posts')
           .select()
           .order('created_at', ascending: false)
-          .limit(20);
+          .limit(20)
+          .timeout(const Duration(seconds: 10));
 
       if (mounted) {
         setState(() {
@@ -59,35 +90,42 @@ class _KomunitasScreenState extends State<KomunitasScreen> {
         });
       }
     } catch (e) {
-      // Fallback to empty list if table doesn't exist yet
       if (mounted) {
         setState(() {
           _posts = [];
           _isLoading = false;
         });
+        if (showSpinner) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Gagal memuat: $e'), backgroundColor: Colors.red),
+          );
+        }
       }
     }
   }
 
   Future<void> _createPost() async {
-    if (_postController.text.trim().isEmpty) return;
+    if (_postController.text.trim().isEmpty && _selectedImage == null) return;
 
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
     setState(() => _isPosting = true);
     try {
+      final imageUrl = await _uploadPostImage(user.id);
       await Supabase.instance.client.from('community_posts').insert({
         'user_id': user.id,
         'author_name': _currentUserName ?? 'User GaweIn',
         'author_role': _currentUserRole ?? 'Pencari Kerja',
         'content': _postController.text.trim(),
+        'image_url': imageUrl,
         'likes_count': 0,
         'created_at': DateTime.now().toIso8601String(),
       });
 
       _postController.clear();
-      await _loadData();
+      setState(() => _selectedImage = null);
+      await _loadData(showSpinner: false);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -106,13 +144,29 @@ class _KomunitasScreenState extends State<KomunitasScreen> {
   }
 
   Future<void> _likePost(Map<String, dynamic> post) async {
+    // Optimistic update: increment locally immediately
+    final idx = _posts.indexWhere((p) => p['id'] == post['id']);
+    if (idx != -1) {
+      setState(() {
+        _posts[idx] = Map.from(_posts[idx])
+          ..['likes_count'] = (_posts[idx]['likes_count'] ?? 0) + 1;
+      });
+    }
     try {
-      final currentLikes = (post['likes_count'] ?? 0) as int;
       await Supabase.instance.client
           .from('community_posts')
-          .update({'likes_count': currentLikes + 1}).eq('id', post['id']);
-      await _loadData();
-    } catch (_) {}
+          .update({'likes_count': (post['likes_count'] ?? 0) + 1})
+          .eq('id', post['id'])
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      // Revert on failure
+      if (idx != -1 && mounted) {
+        setState(() {
+          _posts[idx] = Map.from(_posts[idx])
+            ..['likes_count'] = (_posts[idx]['likes_count'] ?? 1) - 1;
+        });
+      }
+    }
   }
 
   String _timeAgo(String? createdAt) {
@@ -184,10 +238,46 @@ class _KomunitasScreenState extends State<KomunitasScreen> {
                     ),
                   ],
                 ),
+                if (_selectedImage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: Stack(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.file(
+                            File(_selectedImage!.path),
+                            height: 160,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        Positioned(
+                          top: 4,
+                          right: 4,
+                          child: GestureDetector(
+                            onTap: () => setState(() => _selectedImage = null),
+                            child: Container(
+                              decoration: const BoxDecoration(
+                                color: Colors.black54,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.close, color: Colors.white, size: 20),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 const Divider(),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
+                    IconButton(
+                      onPressed: _isPosting ? null : _pickImage,
+                      icon: const Icon(Icons.image_outlined, color: Colors.deepPurple),
+                      tooltip: 'Tambah foto',
+                    ),
                     ElevatedButton(
                       onPressed: _isPosting ? null : _createPost,
                       style: ElevatedButton.styleFrom(
@@ -301,6 +391,19 @@ class _KomunitasScreenState extends State<KomunitasScreen> {
           const SizedBox(height: 12),
           Text(content, style: const TextStyle(fontSize: 14, height: 1.5)),
           const SizedBox(height: 12),
+          if (post['image_url'] != null && (post['image_url'] as String).isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12.0),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  post['image_url'],
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+            ),
           const Divider(height: 1),
           const SizedBox(height: 8),
           Row(
@@ -317,7 +420,270 @@ class _KomunitasScreenState extends State<KomunitasScreen> {
                   ],
                 ),
               ),
+              const SizedBox(width: 20),
+              GestureDetector(
+                onTap: () => _showCommentsSheet(post),
+                child: Row(
+                  children: [
+                    Icon(Icons.chat_bubble_outline, size: 20, color: Colors.grey.shade600),
+                    const SizedBox(width: 4),
+                    Text('Komentar', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                  ],
+                ),
+              ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showCommentsSheet(Map<String, dynamic> post) async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _CommentsSheet(
+        post: post,
+        currentUserName: _currentUserName ?? 'User GaweIn',
+        currentUserRole: _currentUserRole ?? 'Pencari Kerja',
+      ),
+    );
+  }
+}
+
+class _CommentsSheet extends StatefulWidget {
+  final Map<String, dynamic> post;
+  final String currentUserName;
+  final String currentUserRole;
+
+  const _CommentsSheet({
+    required this.post,
+    required this.currentUserName,
+    required this.currentUserRole,
+  });
+
+  @override
+  State<_CommentsSheet> createState() => _CommentsSheetState();
+}
+
+class _CommentsSheetState extends State<_CommentsSheet> {
+  final _commentController = TextEditingController();
+  List<Map<String, dynamic>> _comments = [];
+  bool _isLoading = true;
+  bool _isPosting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadComments();
+  }
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadComments() async {
+    try {
+      final data = await Supabase.instance.client
+          .from('community_comments')
+          .select()
+          .eq('post_id', widget.post['id'])
+          .order('created_at', ascending: true)
+          .timeout(const Duration(seconds: 10));
+      if (mounted) {
+        setState(() {
+          _comments = List<Map<String, dynamic>>.from(data);
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _postComment() async {
+    if (_commentController.text.trim().isEmpty) return;
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    setState(() => _isPosting = true);
+    try {
+      await Supabase.instance.client.from('community_comments').insert({
+        'post_id': widget.post['id'],
+        'user_id': user.id,
+        'author_name': widget.currentUserName,
+        'author_role': widget.currentUserRole,
+        'content': _commentController.text.trim(),
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      _commentController.clear();
+      await _loadComments();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isPosting = false);
+    }
+  }
+
+  String _timeAgo(String? createdAt) {
+    if (createdAt == null) return '';
+    final diff = DateTime.now().difference(DateTime.parse(createdAt).toLocal());
+    if (diff.inMinutes < 1) return 'Baru saja';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} mnt lalu';
+    if (diff.inHours < 24) return '${diff.inHours} jam lalu';
+    return '${diff.inDays} hari lalu';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.75,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (_, scrollController) => Column(
+        children: [
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 12),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Row(
+              children: [
+                const Icon(Icons.chat_bubble_outline, color: Colors.deepPurple),
+                const SizedBox(width: 8),
+                const Text('Komentar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              ],
+            ),
+          ),
+          const Divider(),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _comments.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'Belum ada komentar.\nJadi yang pertama!',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: scrollController,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: _comments.length,
+                        itemBuilder: (_, index) {
+                          final c = _comments[index];
+                          final name = c['author_name'] ?? 'User';
+                          final avatarColors = [Colors.orange, Colors.blue, Colors.green, Colors.purple, Colors.red];
+                          final color = avatarColors[name.hashCode % avatarColors.length];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: color,
+                                  child: Text(
+                                    name[0].toUpperCase(),
+                                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade100,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                            const Spacer(),
+                                            Text(_timeAgo(c['created_at']),
+                                                style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(c['content'] ?? '', style: const TextStyle(fontSize: 13)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+          ),
+          Container(
+            padding: EdgeInsets.only(
+              left: 16, right: 16, top: 8,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 12,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(top: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _commentController,
+                    decoration: InputDecoration(
+                      hintText: 'Tulis komentar...',
+                      filled: true,
+                      fillColor: Colors.grey.shade100,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    maxLines: null,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: _isPosting ? null : _postComment,
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: const BoxDecoration(
+                      color: Colors.deepPurple,
+                      shape: BoxShape.circle,
+                    ),
+                    child: _isPosting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : const Icon(Icons.send, color: Colors.white, size: 20),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

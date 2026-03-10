@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class KursusScreen extends StatefulWidget {
   const KursusScreen({super.key});
@@ -144,7 +145,7 @@ class _KursusScreenState extends State<KursusScreen> {
                               scrollDirection: Axis.horizontal,
                               itemCount: _myCourses.length,
                               itemBuilder: (context, index) {
-                                return _buildMyCourseCard(_myCourses[index]['snippet']);
+                                return _buildMyCourseCard(_myCourses[index]);
                               },
                             ),
                     ),
@@ -172,7 +173,7 @@ class _KursusScreenState extends State<KursusScreen> {
                             physics: const NeverScrollableScrollPhysics(),
                             itemCount: _popularCourses.length,
                             itemBuilder: (context, index) {
-                              return _buildPopularCourseTile(_popularCourses[index]['snippet']);
+                              return _buildPopularCourseTile(_popularCourses[index]);
                             },
                           ),
                   ],
@@ -205,13 +206,19 @@ class _KursusScreenState extends State<KursusScreen> {
   }
 
   // Card untuk kursus yang sedang berjalan (Horizontal List)
-  Widget _buildMyCourseCard(Map<String, dynamic> snippet) {
+  Widget _buildMyCourseCard(Map<String, dynamic> item) {
+    final snippet = item['snippet'] as Map<String, dynamic>;
+    final videoId = (item['id'] as Map<String, dynamic>?)?['videoId'] as String? ?? '';
     final title = snippet['title'].toString().replaceAll('&quot;', '"').replaceAll('&#39;', "'");
     final channelTitle = snippet['channelTitle'];
     final thumbnailUrl = snippet['thumbnails']['high']['url'];
 
-    return Container(
-      width: 260,
+    return GestureDetector(
+      onTap: videoId.isNotEmpty
+          ? () => launchUrl(Uri.parse('https://www.youtube.com/watch?v=$videoId'), mode: LaunchMode.externalApplication)
+          : null,
+      child: Container(
+        width: 260,
       margin: const EdgeInsets.only(right: 16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -266,17 +273,24 @@ class _KursusScreenState extends State<KursusScreen> {
           )
         ],
       ),
+    ),
     );
   }
 
   // List Tile untuk kursus populer (Vertical List)
-  Widget _buildPopularCourseTile(Map<String, dynamic> snippet) {
+  Widget _buildPopularCourseTile(Map<String, dynamic> item) {
+    final snippet = item['snippet'] as Map<String, dynamic>;
+    final videoId = (item['id'] as Map<String, dynamic>?)?['videoId'] as String? ?? '';
     final title = snippet['title'].toString().replaceAll('&quot;', '"').replaceAll('&#39;', "'");
     final channelTitle = snippet['channelTitle'];
     final thumbnailUrl = snippet['thumbnails']['default']['url']; // Pakai resolusi kecil untuk list memanjang
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+    return GestureDetector(
+      onTap: videoId.isNotEmpty
+          ? () => launchUrl(Uri.parse('https://www.youtube.com/watch?v=$videoId'), mode: LaunchMode.externalApplication)
+          : null,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -339,7 +353,6 @@ class _KursusScreenState extends State<KursusScreen> {
             ),
           ),
         ],
-      ),
-    );
+      ),    ),    );
   }
 }
