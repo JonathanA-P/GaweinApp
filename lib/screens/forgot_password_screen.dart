@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:timtujuh/screens/otp_verification_screen.dart';
+import 'package:gawein/screens/otp_verification_screen.dart';
 
 class ForgotPasswordScreen extends StatelessWidget {
   const ForgotPasswordScreen({super.key});

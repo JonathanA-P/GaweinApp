@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class KursusScreen extends StatefulWidget {
   const KursusScreen({super.key});
@@ -8,53 +10,51 @@ class KursusScreen extends StatefulWidget {
 }
 
 class _KursusScreenState extends State<KursusScreen> {
-  // Dummy data untuk kursus yang sedang diambil (My Course)
-  final List<Map<String, dynamic>> _myCourses = [
-    {
-      "title": "Java OOP Masterclass",
-      "lessons": "12 lesson",
-      "time": "1h 15m",
-      "progress": 0.6, // 60%
-      "icon": Icons.data_object,
-      "color": Colors.orange,
-    },
-    {
-      "title": "Kewirausahaan Mahasiswa",
-      "lessons": "8 lesson",
-      "time": "45m",
-      "progress": 0.3, // 30%
-      "icon": Icons.storefront,
-      "color": Colors.blue,
-    },
-  ];
+  // --- MASUKKAN API KEY YOUTUBE KAMU DI SINI ---
+  final String apiKey = 'AIzaSyAv1_9HipZkIgNF_dhwvucHu7ixkle4lxg'; 
 
-  // Dummy data untuk Kursus Populer
-  final List<Map<String, dynamic>> _popularCourses = [
-    {
-      "title": "Pengantar AI & Machine Learning",
-      "instructor": "Budi Setiawan",
-      "price": "Gratis",
-      "time": "2h 30m",
-      "icon": Icons.memory,
-      "color": Colors.deepPurple,
-    },
-    {
-      "title": "Dasar Keamanan Siber (Security Eng.)",
-      "instructor": "Siska",
-      "price": "Gratis",
-      "time": "1h 50m",
-      "icon": Icons.security,
-      "color": Colors.redAccent,
-    },
-    {
-      "title": "Pengenalan Game Development",
-      "instructor": "Agus M.",
-      "price": "Gratis",
-      "time": "3h 10m",
-      "icon": Icons.videogame_asset,
-      "color": Colors.green,
-    },
-  ];
+  List<dynamic> _myCourses = [];
+  List<dynamic> _popularCourses = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAllCourses();
+  }
+
+  // Fungsi untuk memuat kedua daftar kursus secara bersamaan
+  Future<void> _loadAllCourses() async {
+    // Mencari video dengan kata kunci berbeda untuk 2 section
+    final myCoursesData = await _fetchYouTubeVideos('tutorial java oop bahasa indonesia', 5);
+    final popularCoursesData = await _fetchYouTubeVideos('tutorial machine learning pemula indonesia', 10);
+
+    if (mounted) {
+      setState(() {
+        _myCourses = myCoursesData;
+        _popularCourses = popularCoursesData;
+        _isLoading = false;
+      });
+    }
+  }
+
+  // Fungsi utama untuk menarik data dari YouTube API
+  Future<List<dynamic>> _fetchYouTubeVideos(String query, int maxResults) async {
+    final url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=$maxResults&q=$query&type=video&key=$apiKey';
+    
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['items'];
+      } else {
+        debugPrint('Gagal memuat YouTube: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Error fetch YouTube: $e');
+    }
+    return []; 
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -63,15 +63,15 @@ class _KursusScreenState extends State<KursusScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: Column(
+        title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Welcome,',
+            Text(
+              'Belajar Hal Baru,',
               style: TextStyle(color: Colors.grey, fontSize: 14),
             ),
-            const Text(
-              'Alfredo',
+            Text(
+              'Tingkatkan Skillmu!',
               style: TextStyle(
                 color: Colors.deepPurple,
                 fontWeight: FontWeight.bold,
@@ -87,92 +87,97 @@ class _KursusScreenState extends State<KursusScreen> {
           )
         ],
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Search Bar [cite: 276]
-              TextField(
-                decoration: InputDecoration(
-                  hintText: 'Search for any course...',
-                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(color: Colors.grey.shade200),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(color: Colors.grey.shade200),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              
-              // Kategori Kursus (Filter Horizontal)
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
+      // Tampilkan indikator loading jika data sedang ditarik dari YouTube
+      body: _isLoading 
+          ? const Center(child: CircularProgressIndicator(color: Colors.deepPurple))
+          : SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildCategoryChip('All Course', true),
-                    _buildCategoryChip('Design', false),
-                    _buildCategoryChip('Coding', false),
-                    _buildCategoryChip('Business', false),
+                    // Search Bar
+                    TextField(
+                      decoration: InputDecoration(
+                        hintText: 'Search for any course...',
+                        prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(color: Colors.grey.shade200),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(color: Colors.grey.shade200),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    // Kategori Kursus (Filter Horizontal)
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildCategoryChip('All Course', true),
+                          _buildCategoryChip('Java', false),
+                          _buildCategoryChip('Python', false),
+                          _buildCategoryChip('AI/ML', false),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+
+                    // Bagian Lanjutkan Belajar (My Course)
+                    const Text(
+                      'Lanjutkan Belajar',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      height: 200,
+                      child: _myCourses.isEmpty 
+                          ? const Center(child: Text('Tidak ada video ditemukan / API Key belum diatur'))
+                          : ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: _myCourses.length,
+                              itemBuilder: (context, index) {
+                                return _buildMyCourseCard(_myCourses[index]['snippet']);
+                              },
+                            ),
+                    ),
+                    const SizedBox(height: 32),
+
+                    // Bagian Popular Course
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Kursus Populer',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          'See All',
+                          style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _popularCourses.isEmpty
+                        ? const Center(child: Text('Tidak ada video ditemukan / API Key belum diatur'))
+                        : ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _popularCourses.length,
+                            itemBuilder: (context, index) {
+                              return _buildPopularCourseTile(_popularCourses[index]['snippet']);
+                            },
+                          ),
                   ],
                 ),
               ),
-              const SizedBox(height: 32),
-
-              // Bagian My Course [cite: 277]
-              const Text(
-                'My Course',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: 180,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _myCourses.length,
-                  itemBuilder: (context, index) {
-                    final course = _myCourses[index];
-                    return _buildMyCourseCard(course);
-                  },
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // Bagian Popular Course [cite: 278]
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: const [
-                  Text(
-                    'Popular Course',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    'See All',
-                    style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _popularCourses.length,
-                itemBuilder: (context, index) {
-                  final course = _popularCourses[index];
-                  return _buildPopularCourseTile(course);
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 
@@ -198,108 +203,101 @@ class _KursusScreenState extends State<KursusScreen> {
     );
   }
 
-  // Card untuk kursus yang sedang berjalan
-  Widget _buildMyCourseCard(Map<String, dynamic> course) {
+  // Card untuk kursus yang sedang berjalan (Horizontal List)
+  Widget _buildMyCourseCard(Map<String, dynamic> snippet) {
+    final title = snippet['title'].toString().replaceAll('&quot;', '"').replaceAll('&#39;', "'");
+    final channelTitle = snippet['channelTitle'];
+    final thumbnailUrl = snippet['thumbnails']['high']['url'];
+
     return Container(
       width: 260,
       margin: const EdgeInsets.only(right: 16),
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
+          BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5)),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: course['color'].withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(course['icon'], color: course['color'], size: 30),
+          // Thumbnail Gambar YouTube
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            child: Image.network(
+              thumbnailUrl,
+              height: 110,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => Container(
+                height: 110, color: Colors.grey.shade200, child: const Icon(Icons.broken_image, color: Colors.grey),
               ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Colors.deepPurple.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '${course['time']} • ${course['lessons']}',
-                  style: const TextStyle(fontSize: 10, color: Colors.deepPurple, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
+            ),
           ),
-          const Spacer(),
-          Text(
-            course['title'],
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 12),
-          // Progress Bar
-          Row(
-            children: [
-              Expanded(
-                child: LinearProgressIndicator(
-                  value: course['progress'],
-                  backgroundColor: Colors.grey.shade200,
-                  color: course['color'],
-                  minHeight: 6,
-                  borderRadius: BorderRadius.circular(10),
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${(course['progress'] * 100).toInt()}%',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-              )
-            ],
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.smart_display, size: 14, color: Colors.red),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        channelTitle,
+                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           )
         ],
       ),
     );
   }
 
-  // List Tile untuk kursus populer
-  Widget _buildPopularCourseTile(Map<String, dynamic> course) {
+  // List Tile untuk kursus populer (Vertical List)
+  Widget _buildPopularCourseTile(Map<String, dynamic> snippet) {
+    final title = snippet['title'].toString().replaceAll('&quot;', '"').replaceAll('&#39;', "'");
+    final channelTitle = snippet['channelTitle'];
+    final thumbnailUrl = snippet['thumbnails']['default']['url']; // Pakai resolusi kecil untuk list memanjang
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
+          BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5)),
         ],
       ),
       child: Row(
         children: [
-          Container(
-            height: 70,
-            width: 70,
-            decoration: BoxDecoration(
-              color: course['color'].withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
+          // Thumbnail YouTube berbentuk Kotak
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.network(
+              thumbnailUrl,
+              height: 70,
+              width: 90,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => Container(
+                height: 70, width: 90, color: Colors.grey.shade200, child: const Icon(Icons.broken_image, color: Colors.grey),
+              ),
             ),
-            child: Icon(course['icon'], color: course['color'], size: 35),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -307,34 +305,33 @@ class _KursusScreenState extends State<KursusScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  course['title'],
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Row(
                   children: [
                     const Icon(Icons.person, size: 14, color: Colors.grey),
                     const SizedBox(width: 4),
-                    Text(
-                      course['instructor'],
-                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    Expanded(
+                      child: Text(
+                        channelTitle,
+                        style: const TextStyle(color: Colors.grey, fontSize: 12),
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                Row(
+                const SizedBox(height: 6),
+                const Row(
                   children: [
-                    Text(
-                      course['price'],
-                      style: const TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold),
-                    ),
-                    const Spacer(),
-                    const Icon(Icons.access_time, size: 14, color: Colors.grey),
-                    const SizedBox(width: 4),
-                    Text(
-                      course['time'],
-                      style: const TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
+                    Text("Gratis", style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold, fontSize: 12)),
+                    Spacer(),
+                    Icon(Icons.ondemand_video, size: 14, color: Colors.red),
+                    SizedBox(width: 4),
+                    Text("YouTube", style: TextStyle(color: Colors.grey, fontSize: 12)),
                   ],
                 ),
               ],

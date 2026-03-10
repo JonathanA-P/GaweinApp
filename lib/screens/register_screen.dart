@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:timtujuh/screens/login_screen.dart';
-import 'package:intl/intl.dart'; // Jangan lupa tambahkan package 'intl' di pubspec.yaml jika belum ada, atau gunakan format manual
+import 'package:gawein/screens/login_screen.dart';
+import 'package:gawein/screens/otp_screen.dart'; // Rute ke OTP
+import 'package:supabase_flutter/supabase_flutter.dart'; 
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -12,8 +13,10 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _passwordController = TextEditingController();
-  final _dobController = TextEditingController(); // Controller untuk Tanggal Lahir
-  
+  final _dobController = TextEditingController(); 
+  final _emailController = TextEditingController();
+  bool _isLoading = false;
+
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
 
@@ -21,19 +24,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void dispose() {
     _passwordController.dispose();
     _dobController.dispose();
+    _emailController.dispose(); 
     super.dispose();
   }
 
-  // Fungsi untuk memunculkan kalender dengan batasan umur >= 17 tahun sesuai PRD
   Future<void> _selectDate(BuildContext context) async {
     final DateTime today = DateTime.now();
-    final DateTime maxDate = DateTime(today.year - 17, today.month, today.day); // Minimal 17 tahun
+    final DateTime maxDate = DateTime(today.year - 17, today.month, today.day); 
 
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: maxDate,
       firstDate: DateTime(1950),
-      lastDate: maxDate, // Tidak bisa pilih tanggal yang membuat umur di bawah 17
+      lastDate: maxDate, 
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -50,9 +53,43 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     if (picked != null) {
       setState(() {
-        // Format sederhana DD/MM/YYYY
         _dobController.text = "${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}";
       });
+    }
+  }
+
+  // Fungsi Register ke Supabase
+  Future<void> _prosesRegister() async {
+    if (_formKey.currentState!.validate()) {
+      setState(() => _isLoading = true);
+
+      try {
+        final email = _emailController.text.trim();
+        final password = _passwordController.text;
+
+        final response = await Supabase.instance.client.auth.signUp(
+          email: email,
+          password: password,
+        );
+
+        // JIKA BERHASIL, LEMPAR KE HALAMAN OTP
+        if (response.user != null && mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => OtpScreen(email: email), // Kirim email ke layar OTP
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Gagal Mendaftar: $e'), backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -68,7 +105,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Header Section
                 const Text(
                   'Create Account',
                   style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
@@ -84,7 +120,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   key: _formKey,
                   child: Column(
                     children: [
-                      // Nama Field
                       _buildTextField(
                         label: 'Nama Lengkap',
                         hint: 'Masukkan nama sesuai KTP',
@@ -92,28 +127,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         validator: (value) => value!.isEmpty ? 'Nama tidak boleh kosong' : null,
                       ),
                       
-                      // Tanggal Lahir Field (DatePicker)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 20.0),
                         child: TextFormField(
                           controller: _dobController,
-                          readOnly: true, // Tidak bisa diketik manual
+                          readOnly: true, 
                           onTap: () => _selectDate(context),
                           decoration: _inputDecoration('Tanggal Lahir', 'Pilih tanggal lahir', Icons.calendar_today_outlined),
                           validator: (value) => value!.isEmpty ? 'Tanggal lahir wajib diisi' : null,
                         ),
                       ),
 
-                      // Email Field
                       _buildTextField(
+                        controller: _emailController,
                         label: 'Email',
-                        hint: 'email@contoh.com',
+                        hint: 'email@gmail.com',
                         icon: Icons.email_outlined,
                         keyboardType: TextInputType.emailAddress,
                         validator: (value) => value!.isEmpty ? 'Email tidak boleh kosong' : null,
                       ),
 
-                      // NIK Field
                       _buildTextField(
                         label: 'NIK',
                         hint: 'Masukkan 16 digit NIK',
@@ -127,7 +160,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         },
                       ),
 
-                      // Password Field
                       Padding(
                         padding: const EdgeInsets.only(bottom: 20.0),
                         child: TextFormField(
@@ -143,7 +175,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                       ),
 
-                      // Konfirmasi Password Field
                       Padding(
                         padding: const EdgeInsets.only(bottom: 24.0),
                         child: TextFormField(
@@ -161,31 +192,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                       ),
 
-                      // Tombol Register
                       SizedBox(
                         width: double.infinity,
                         height: 55,
                         child: ElevatedButton(
-                          onPressed: () {
-                            if (_formKey.currentState!.validate()) {
-                              Navigator.pushReplacement(
-                                context, 
-                                MaterialPageRoute(builder: (context) => const LoginScreen()),
-                              );
-                            }
-                          },
+                          onPressed: _isLoading ? null : _prosesRegister,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.deepPurple,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             elevation: 2,
                           ),
-                          child: const Text('Register', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                          child: _isLoading 
+                              ? const CircularProgressIndicator(color: Colors.white)
+                              : const Text('Register', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                         ),
                       ),
                       
                       const SizedBox(height: 24),
                       
-                      // Social Login (Sesuai Referensi PRD)
                       Row(
                         children: [
                           const Expanded(child: Divider()),
@@ -198,20 +222,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       const SizedBox(height: 24),
                       
-                      // Icon Social Login Placeholder
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           _socialButton(Icons.facebook, Colors.blue),
                           const SizedBox(width: 20),
-                          _socialButton(Icons.g_mobiledata, Colors.red, isLarge: true), // Placeholder Google
+                          _socialButton(Icons.g_mobiledata, Colors.red, isLarge: true), 
                           const SizedBox(width: 20),
                           _socialButton(Icons.apple, Colors.black),
                         ],
                       ),
                       const SizedBox(height: 24),
 
-                      // Link ke Login
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -241,29 +263,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  // Helper Widget untuk Text Field biasa
   Widget _buildTextField({
     required String label, 
     required String hint, 
     required IconData icon, 
     TextInputType? keyboardType,
     int? maxLength,
+    TextEditingController? controller, 
     String? Function(String?)? validator,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 20.0),
       child: TextFormField(
+        controller: controller,
         keyboardType: keyboardType,
         maxLength: maxLength,
         decoration: _inputDecoration(label, hint, icon).copyWith(
-          counterText: '', // Sembunyikan counter text pada NIK
+          counterText: '', 
         ),
         validator: validator,
       ),
     );
   }
 
-  // Helper untuk styling Decoration
   InputDecoration _inputDecoration(String label, String hint, IconData icon) {
     return InputDecoration(
       labelText: label,
@@ -286,7 +308,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  // Helper untuk tombol social login
   Widget _socialButton(IconData icon, Color color, {bool isLarge = false}) {
     return Container(
       padding: const EdgeInsets.all(12),

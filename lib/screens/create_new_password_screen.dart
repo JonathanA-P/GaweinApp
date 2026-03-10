@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:timtujuh/screens/login_screen.dart';
+import 'package:gawein/screens/login_screen.dart';
 
 class CreateNewPasswordScreen extends StatelessWidget {
   const CreateNewPasswordScreen({super.key});

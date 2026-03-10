@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:timtujuh/screens/home_screen.dart';
-import 'package:timtujuh/screens/register_screen.dart';
-import 'package:timtujuh/screens/forgot_password_screen.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gawein/blocs/auth/auth_bloc.dart';
+import 'package:gawein/blocs/auth/auth_event.dart';
+import 'package:gawein/blocs/auth/auth_state.dart';
+import 'package:gawein/screens/register_screen.dart';
+import 'package:gawein/screens/forgot_password_screen.dart';
+import 'package:gawein/screens/pilih_peran_screen.dart';
+import 'package:gawein/screens/home_screen.dart'; // Tambahan import Home Screen
+import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState; // Tambahan import Supabase
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -12,172 +18,204 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
+  
+  // --- TAMBAHAN CONTROLLER BARU ---
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isLoading = false;
   bool _isPasswordVisible = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  // --- FUNGSI PROSES LOGIN BARU ---
+  Future<void> _prosesLogin() async {
+    if (!_formKey.currentState!.validate()) return; // Cek apakah form kosong
+
+    setState(() => _isLoading = true);
+    
+    try {
+      // 1. Mencoba login ke Supabase
+      final response = await Supabase.instance.client.auth.signInWithPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+
+      if (response.user != null && mounted) {
+        // 2. Cek apakah user ini sudah memilih peran di tabel profiles
+        final data = await Supabase.instance.client
+            .from('profiles')
+            .select('role')
+            .eq('id', response.user!.id)
+            .maybeSingle(); 
+
+        if (!mounted) return;
+
+        if (data == null || data['role'] == null) {
+          // Jika profil belum ada atau role kosong, lempar ke Pilih Peran
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const PilihPeranScreen()),
+          );
+        } else {
+          // Jika role sudah ada, langsung ke Home Screen
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const HomeScreen()),
+          );
+        }
+      }
+    } on AuthException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Login Gagal: ${e.message}'), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Terjadi Kesalahan: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      // Gunakan SingleChildScrollView agar tidak error saat keyboard muncul
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                 // Header Section
-                const Text(
-                  'Welcome Back,',
-                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Sign in to continue to GaweIn',
-                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                ),
-                const SizedBox(height: 40),
+        child: BlocListener<AuthBloc, AuthState>(
+          listener: (context, state) {
+            if (state is AuthError) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(state.message), backgroundColor: Colors.red),
+              );
+            } else if (state is AuthAuthenticated) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const PilihPeranScreen()),
+              );
+            }
+          },
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Welcome Back,', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Text('Sign in to continue to GaweIn', style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+                  const SizedBox(height: 40),
 
-                Form(
-                  key: _formKey,
-                  child: Column(
-                    children: [
-                      // Email Field yang dipercantik
-                      TextFormField(
-                        decoration: InputDecoration(
-                          labelText: 'Email',
-                          hintText: 'Masukkan email Anda',
-                          prefixIcon: const Icon(Icons.email_outlined),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                  Form(
+                    key: _formKey,
+                    child: Column(
+                      children: [
+                        // Email Field
+                        TextFormField(
+                          controller: _emailController, // Dipasangkan dengan controller
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: InputDecoration(
+                            labelText: 'Email',
+                            prefixIcon: const Icon(Icons.email_outlined),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            filled: true,
+                            fillColor: Colors.grey.shade50,
                           ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          filled: true,
-                          fillColor: Colors.grey.shade50,
+                          validator: (value) => value!.isEmpty ? 'Email tidak boleh kosong' : null,
                         ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Email tidak boleh kosong';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 20),
-                      // Password Field yang dipercantik dengan toggle visibility
-                      TextFormField(
-                        obscureText: !_isPasswordVisible,
-                        decoration: InputDecoration(
-                          labelText: 'Password',
-                          prefixIcon: const Icon(Icons.lock_outline),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
-                              color: Colors.grey,
+                        const SizedBox(height: 20),
+                        
+                        // Password Field
+                        TextFormField(
+                          controller: _passwordController, // Dipasangkan dengan controller
+                          obscureText: !_isPasswordVisible,
+                          decoration: InputDecoration(
+                            labelText: 'Password',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              icon: Icon(_isPasswordVisible ? Icons.visibility : Icons.visibility_off, color: Colors.grey),
+                              onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
                             ),
-                            onPressed: () {
-                              setState(() {
-                                _isPasswordVisible = !_isPasswordVisible;
-                              });
-                            },
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            filled: true,
+                            fillColor: Colors.grey.shade50,
                           ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          filled: true,
-                          fillColor: Colors.grey.shade50,
+                          validator: (value) => value!.isEmpty ? 'Password tidak boleh kosong' : null,
                         ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Password tidak boleh kosong';
-                          }
-                          return null;
-                        },
-                      ),
-                      
-                      // Tombol Lupa Password
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => const ForgotPasswordScreen()),
+                        
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ForgotPasswordScreen())),
+                            child: const Text('Lupa Password?', style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.w600)),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        
+                        // Tombol Login Email Biasa
+                        SizedBox(
+                          width: double.infinity,
+                          height: 55,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _prosesLogin, // Memanggil fungsi login baru
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                            child: _isLoading 
+                                ? const CircularProgressIndicator(color: Colors.white)
+                                : const Text('Login', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Tombol Login dengan Google
+                        BlocBuilder<AuthBloc, AuthState>(
+                          builder: (context, state) {
+                            if (state is AuthLoading) {
+                              return const Center(child: CircularProgressIndicator());
+                            }
+                            return SizedBox(
+                              width: double.infinity,
+                              height: 55,
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  context.read<AuthBloc>().add(LoginWithGooglePressed());
+                                },
+                                icon: const Icon(Icons.g_mobiledata, size: 32, color: Colors.red),
+                                label: const Text('Login with Google', style: TextStyle(fontSize: 16, color: Colors.black87)),
+                                style: OutlinedButton.styleFrom(
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  side: BorderSide(color: Colors.grey.shade300),
+                                ),
+                              ),
                             );
                           },
-                          child: const Text(
-                            'Lupa Password?',
-                            style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.w600),
-                          ),
                         ),
-                      ),
-                      const SizedBox(height: 24),
-                      
-                      // Tombol Login Utama
-                      SizedBox(
-                        width: double.infinity,
-                        height: 55,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            if (_formKey.currentState!.validate()) {
-                              Navigator.pushReplacement(
-                                context, 
-                                MaterialPageRoute(builder: (context) => HomeScreen())
-                              );
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.deepPurple,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                        const SizedBox(height: 24),
+
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text('Belum punya akun? ', style: TextStyle(color: Colors.grey[600])),
+                            GestureDetector(
+                              onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const RegisterScreen())),
+                              child: const Text('Register', style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold)),
                             ),
-                            elevation: 2,
-                          ),
-                          child: const Text(
-                            'Login',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      
-                      // Link ke Register
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Belum punya akun? ',
-                            style: TextStyle(color: Colors.grey[600]),
-                          ),
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(builder: (context) => const RegisterScreen())
-                              );
-                            },
-                            child: const Text(
-                              'Register',
-                              style: TextStyle(
-                                color: Colors.deepPurple,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      )
-                    ],
+                          ],
+                        )
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

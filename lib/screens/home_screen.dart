@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:timtujuh/screens/cari_kerja_screen.dart'; 
+import 'package:gawein/screens/cari_kerja_screen.dart'; 
 import 'profil_screen.dart';
 import 'kursus_scren.dart';
 import 'komunitas_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:gawein/screens/tambah_lowongan_screen.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -13,6 +17,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
+  String? _role; // Variabel baru untuk peran
+  bool _isLoading = true; // Variabel baru untuk status loading
+  String _fullName = 'User'; // Default jika nama tidak ditemukan
 
   void _onItemTapped(int index) {
     setState(() {
@@ -21,13 +28,42 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _checkUserRole(); // Panggil fungsi cek peran saat startup
+  }
+
+Future<void> _checkUserRole() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user != null) {
+      // Tambahkan 'full_name' di bagian select
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select('role, full_name') 
+          .eq('id', user.id)
+          .single();
+      
+      setState(() {
+        _role = data['role'];
+        _fullName = data['full_name'] ?? 'User GaweIn'; // <-- SIMPAN NAMA DI SINI
+        _isLoading = false;
+      });
+    }
+  }
+
+@override
   Widget build(BuildContext context) {
-    // INI YANG BARU: Daftar halaman untuk Bottom Navigation
-    final List<Widget> _pages = [
-      _buildHomeContent(), // Index 0: Beranda
-      const CariKerjaScreen(), // Index 1: Halaman Cari Kerja yang baru kita buat
-      const KursusScreen(), // Index 2: Placeholder Course
-      const KomunitasScreen(), // Index 3: Placeholder Komunitas
+    // Tampilkan loading spinner jika data peran belum siap
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final List<Widget> pages = [
+      // Jika perekrut, tampilkan konten perekrut. Jika bukan, tampilkan konten Alfredo yang lama.
+      _role == 'perekrut' ? _buildPerekrutContent() : _buildHomeContent(), 
+      const CariKerjaScreen(),
+      const KursusScreen(),
+      const KomunitasScreen(),
       const ProfilScreen(), 
     ];
 
@@ -35,7 +71,7 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: Colors.grey[50],
       // INI YANG BARU: Body sekarang berubah dinamis berdasarkan index yang diklik
       body: SafeArea(
-        child: _pages[_selectedIndex], 
+        child: pages[_selectedIndex], 
       ),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
@@ -75,11 +111,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
-  // (Sisa widget _buildProfileHeader, _buildSectionTitle, _buildCommunityThreads, 
-  // _buildJobRecommendations, _buildCourseRecommendations dari kode sebelumnya tetap di sini)
-  
-  // ... [Masukkan function _buildProfileHeader dll yang sudah saya berikan sebelumnya di sini] ...
   
   Widget _buildProfileHeader() {
     return Container(
@@ -103,13 +134,13 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(width: 16),
               Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text('Good morning', style: TextStyle(color: Colors.white70, fontSize: 14)),
-                  SizedBox(height: 4),
-                  Text('Alfredo', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                ],
-              ),
+               crossAxisAlignment: CrossAxisAlignment.start,
+               children: [
+               const Text('Good morning', style: TextStyle(color: Colors.white70, fontSize: 14)),
+               const SizedBox(height: 4),
+               Text(_fullName, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+  ],
+),
             ],
           ),
           Container(
@@ -167,17 +198,104 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+// ==========================================
+  // TAHAP 1: FITUR CARI PEKERJAAN (DARI SUPABASE)
+  // ==========================================
   Widget _buildJobRecommendations() {
     return SizedBox(
       height: 160,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-        children: [
-          _jobCard('Barista / Waiter', 'Kopi Mbois Malang', 'Rp 1.5M - 2M', Icons.coffee),
-          _jobCard('Staff Gudang Logistik', 'PT. Logistik Jaya Abadi', 'Rp 2M - 2.5M', Icons.inventory),
-        ],
+      child: FutureBuilder<List<Map<String, dynamic>>>(
+        // Mengambil data dari tabel 'jobs' Supabase
+        future: Supabase.instance.client.from('jobs').select().order('created_at', ascending: false),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
+          }
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return const Center(child: Text('Belum ada lowongan kerja.', style: TextStyle(color: Colors.grey)));
+          }
+
+          final jobs = snapshot.data!;
+          return ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            itemCount: jobs.length,
+            itemBuilder: (context, index) {
+              final job = jobs[index];
+              return _jobCard(
+                job['title'] ?? 'Posisi Tidak Diketahui',
+                job['company_name'] ?? 'Perusahaan Rahasia',
+                job['salary'] ?? 'Gaji Dirahasiakan',
+                Icons.work,
+              );
+            },
+          );
+        },
       ),
+    );
+  }
+
+  // ==========================================
+  // TAHAP 3: FITUR COURSE (DARI YOUTUBE API)
+  // ==========================================
+  Future<List<dynamic>> _fetchYouTubeCourses() async {
+    // Catatan: Ganti 'YOUR_API_KEY' dengan API Key asli dari Google Cloud Console kamu
+    const apiKey = 'YOUR_API_KEY'; 
+    const query = 'belajar programming flutter indonesia'; // Kata kunci pencarian
+    const url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=3&q=$query&type=video&key=$apiKey';
+
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['items']; // Mengembalikan daftar video
+      }
+    } catch (e) {
+      debugPrint('Error fetch YouTube: $e');
+    }
+    return []; // Kembalikan list kosong jika gagal (API key belum diatur)
+  }
+
+  Widget _buildCourseRecommendations() {
+    return FutureBuilder<List<dynamic>>(
+      future: _fetchYouTubeCourses(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        
+        final videos = snapshot.data ?? [];
+        
+        // Fallback jika API Key belum dipasang atau error
+        if (videos.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+            child: Column(
+              children: [
+                _courseListTile('Java OOP Masterclass (Mock)', 'Data dummy karena API Key kosong', Icons.code),
+              ],
+            ),
+          );
+        }
+
+        // Tampilkan video asli dari YouTube
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+          child: Column(
+            children: videos.map((video) {
+              final snippet = video['snippet'];
+              final title = snippet['title'].toString().replaceAll('&quot;', '"'); // Rapikan teks
+              final channel = snippet['channelTitle'];
+              return Column(
+                children: [
+                  _courseListTile(title, channel, Icons.play_circle_fill),
+                  const SizedBox(height: 12),
+                ],
+              );
+            }).toList(),
+          ),
+        );
+      },
     );
   }
 
@@ -233,18 +351,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildCourseRecommendations() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-      child: Column(
-        children: [
-          _courseListTile('Java OOP Masterclass', 'Belajar fundamental PBO', Icons.code),
-          const SizedBox(height: 12),
-          _courseListTile('AI/ML Engineering Basics', 'Pengenalan Machine Learning', Icons.memory),
-        ],
-      ),
-    );
-  }
 
   Widget _courseListTile(String title, String subtitle, IconData icon) {
     return Container(
@@ -278,4 +384,46 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+  // Fungsi ini wajib ada agar error merah di gambar {5F16B24B-B692-4B63-9CA7-367CD466EDA5} hilang
+Widget _buildPerekrutContent() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text(
+            'Selamat Datang Perekrut!\nKelola lowongan Anda di sini.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 24), // Jarak antara teks dan tombol
+          
+          // --- INI TOMBOL BARUNYA ---
+          ElevatedButton.icon(
+            onPressed: () {
+              // Fungsi untuk pindah ke halaman TambahLowonganScreen
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const TambahLowonganScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.add, color: Colors.white),
+            label: const Text(
+              'Tambah Lowongan Pekerjaan',
+              style: TextStyle(color: Colors.white),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurple, // Warna tombol
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
 }
