@@ -17,7 +17,9 @@ class _KomunitasScreenState extends State<KomunitasScreen> {
   bool _isPosting = false;
   String? _currentUserName;
   String? _currentUserRole;
+  String? _currentUserId;
   XFile? _selectedImage;
+  final Set<dynamic> _likedPostIds = {};
 
   @override
   void initState() {
@@ -74,6 +76,7 @@ class _KomunitasScreenState extends State<KomunitasScreen> {
         _currentUserRole = profileData?['role'] == 'perekrut'
             ? 'Perwakilan Perusahaan'
             : 'Pencari Kerja';
+        _currentUserId = user.id;
       }
 
       final postsData = await Supabase.instance.client
@@ -144,8 +147,12 @@ class _KomunitasScreenState extends State<KomunitasScreen> {
   }
 
   Future<void> _likePost(Map<String, dynamic> post) async {
+    final postId = post['id'];
+    if (_likedPostIds.contains(postId)) return; // already liked
+    _likedPostIds.add(postId);
+
     // Optimistic update: increment locally immediately
-    final idx = _posts.indexWhere((p) => p['id'] == post['id']);
+    final idx = _posts.indexWhere((p) => p['id'] == postId);
     if (idx != -1) {
       setState(() {
         _posts[idx] = Map.from(_posts[idx])
@@ -156,10 +163,11 @@ class _KomunitasScreenState extends State<KomunitasScreen> {
       await Supabase.instance.client
           .from('community_posts')
           .update({'likes_count': (post['likes_count'] ?? 0) + 1})
-          .eq('id', post['id'])
+          .eq('id', postId)
           .timeout(const Duration(seconds: 10));
     } catch (_) {
       // Revert on failure
+      _likedPostIds.remove(postId);
       if (idx != -1 && mounted) {
         setState(() {
           _posts[idx] = Map.from(_posts[idx])
@@ -386,6 +394,25 @@ class _KomunitasScreenState extends State<KomunitasScreen> {
                   ],
                 ),
               ),
+              if (post['user_id'] == _currentUserId)
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'delete') _deletePost(post);
+                  },
+                  icon: Icon(Icons.more_vert, color: Colors.grey.shade400, size: 20),
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_outline, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text('Hapus Postingan', style: TextStyle(color: Colors.red)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
           const SizedBox(height: 12),
@@ -412,7 +439,11 @@ class _KomunitasScreenState extends State<KomunitasScreen> {
                 onTap: () => _likePost(post),
                 child: Row(
                   children: [
-                    Icon(Icons.favorite_border, size: 20, color: Colors.grey.shade600),
+                    Icon(
+                      _likedPostIds.contains(post['id']) ? Icons.favorite : Icons.favorite_border,
+                      size: 20,
+                      color: _likedPostIds.contains(post['id']) ? Colors.red : Colors.grey.shade600,
+                    ),
                     const SizedBox(width: 4),
                     Text('$likes', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                     const SizedBox(width: 4),
@@ -436,6 +467,48 @@ class _KomunitasScreenState extends State<KomunitasScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _deletePost(Map<String, dynamic> post) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hapus Postingan?'),
+        content: const Text('Postingan ini akan dihapus secara permanen.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await Supabase.instance.client
+          .from('community_posts')
+          .delete()
+          .eq('id', post['id']);
+      if (mounted) {
+        setState(() => _posts.removeWhere((p) => p['id'] == post['id']));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Postingan berhasil dihapus'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal menghapus: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   Future<void> _showCommentsSheet(Map<String, dynamic> post) async {

@@ -13,11 +13,26 @@ class DetailLowonganScreen extends StatefulWidget {
 class _DetailLowonganScreenState extends State<DetailLowonganScreen> {
   bool _isApplying = false;
   bool _alreadyApplied = false;
+  bool _isRecruiter = false;
 
   @override
   void initState() {
     super.initState();
     _checkIfAlreadyApplied();
+    _checkUserRole();
+  }
+
+  Future<void> _checkUserRole() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    try {
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+      if (mounted) setState(() => _isRecruiter = data?['role'] == 'perekrut');
+    } catch (_) {}
   }
 
   Future<void> _checkIfAlreadyApplied() async {
@@ -207,23 +222,35 @@ class _DetailLowonganScreenState extends State<DetailLowonganScreen> {
           padding: const EdgeInsets.all(16.0),
           child: SizedBox(
             height: 55,
-            child: ElevatedButton(
-              onPressed: (_isApplying || _alreadyApplied) ? null : _applyJob,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _alreadyApplied ? Colors.grey.shade400 : Colors.deepPurple,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: _isApplying
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : Text(
-                      _alreadyApplied ? 'Sudah Dilamar ✓' : 'Apply Now',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+            child: _isRecruiter
+                ? OutlinedButton(
+                    onPressed: null,
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: Colors.grey.shade400),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-            ),
+                    child: Text(
+                      'Anda adalah Rekruiter',
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 16),
+                    ),
+                  )
+                : ElevatedButton(
+                    onPressed: (_isApplying || _alreadyApplied) ? null : _applyJob,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _alreadyApplied ? Colors.grey.shade400 : Colors.deepPurple,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: _isApplying
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : Text(
+                            _alreadyApplied ? 'Sudah Dilamar ✓' : 'Apply Now',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
           ),
         ),
       ),

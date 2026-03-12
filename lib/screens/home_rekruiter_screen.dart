@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gawein/screens/tambah_lowongan_screen.dart';
 import 'package:gawein/screens/profil_screen.dart';
 import 'package:gawein/screens/detail_lowongan_screen.dart';
+import 'package:gawein/screens/pelamar_screen.dart';
 
 class HomeRekruiterScreen extends StatefulWidget {
   const HomeRekruiterScreen({super.key});
@@ -17,6 +18,7 @@ class _HomeRekruiterScreenState extends State<HomeRekruiterScreen> {
   String _fullName = 'Perekrut';
   List<Map<String, dynamic>> _myJobs = [];
   int _totalApplicants = 0;
+  Map<String, int> _applicantCounts = {};
   bool _isLoading = true;
 
   @override
@@ -47,8 +49,9 @@ class _HomeRekruiterScreenState extends State<HomeRekruiterScreen> {
 
       final jobs = List<Map<String, dynamic>>.from(jobsData);
 
-      // Count total applicants across all jobs
+      // Count applicants per job
       int totalApplicants = 0;
+      final Map<String, int> applicantCounts = {};
       if (jobs.isNotEmpty) {
         for (final job in jobs) {
           try {
@@ -56,7 +59,9 @@ class _HomeRekruiterScreenState extends State<HomeRekruiterScreen> {
                 .from('applications')
                 .select('id')
                 .eq('job_id', job['id']);
-            totalApplicants += (count as List).length;
+            final c = (count as List).length;
+            applicantCounts[job['id'].toString()] = c;
+            totalApplicants += c;
           } catch (_) {}
         }
       }
@@ -67,6 +72,7 @@ class _HomeRekruiterScreenState extends State<HomeRekruiterScreen> {
           _companyName = profileData?['company_name'] ?? 'Perusahaan';
           _myJobs = jobs;
           _totalApplicants = totalApplicants;
+          _applicantCounts = applicantCounts;
           _isLoading = false;
         });
       }
@@ -76,20 +82,27 @@ class _HomeRekruiterScreenState extends State<HomeRekruiterScreen> {
   }
 
   void _onItemTapped(int index) {
+    if (index == 0 && _selectedIndex == 2) {
+      // Returning from ProfilScreen - refresh name & company
+      _loadData();
+    }
     setState(() => _selectedIndex = index);
   }
 
   @override
   Widget build(BuildContext context) {
-    final List<Widget> pages = [
-      _buildHomeContent(),
-      _buildMyJobsContent(),
-      const ProfilScreen(),
-    ];
-
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      body: SafeArea(child: pages[_selectedIndex]),
+      body: SafeArea(
+        child: IndexedStack(
+          index: _selectedIndex,
+          children: [
+            _buildHomeContent(),
+            _buildMyJobsContent(),
+            const ProfilScreen(),
+          ],
+        ),
+      ),
       floatingActionButton: _selectedIndex < 2
           ? FloatingActionButton.extended(
               onPressed: () async {
@@ -329,6 +342,10 @@ class _HomeRekruiterScreenState extends State<HomeRekruiterScreen> {
   }
 
   Widget _buildJobCard(Map<String, dynamic> job) {
+    final jobId = job['id'].toString();
+    final count = _applicantCounts[jobId] ?? 0;
+    final hasNew = count > 0;
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -341,63 +358,126 @@ class _HomeRekruiterScreenState extends State<HomeRekruiterScreen> {
         ),
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.deepPurple.shade50,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.work, color: Colors.deepPurple),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      job['title'] ?? '-',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.deepPurple.shade50,
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      job['company_name'] ?? '-',
-                      style: const TextStyle(color: Colors.grey, fontSize: 13),
-                    ),
-                    if (job['salary'] != null && (job['salary'] as String).isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          job['salary'],
-                          style: const TextStyle(
-                            color: Colors.green,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              PopupMenuButton<String>(
-                onSelected: (value) async {
-                  if (value == 'delete') {
-                    await _deleteJob(job['id'].toString());
-                  }
-                },
-                itemBuilder: (_) => [
-                  const PopupMenuItem(
-                    value: 'delete',
-                    child: Row(
+                    child: const Icon(Icons.work, color: Colors.deepPurple),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.delete_outline, color: Colors.red),
-                        SizedBox(width: 8),
-                        Text('Hapus Lowongan'),
+                        Text(
+                          job['title'] ?? '-',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          job['company_name'] ?? '-',
+                          style: const TextStyle(color: Colors.grey, fontSize: 13),
+                        ),
+                        if (job['salary'] != null && (job['salary'] as String).isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              job['salary'],
+                              style: const TextStyle(
+                                color: Colors.green,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),
+                  PopupMenuButton<String>(
+                    onSelected: (value) async {
+                      if (value == 'delete') {
+                        await _deleteJob(job['id'].toString());
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete_outline, color: Colors.red),
+                            SizedBox(width: 8),
+                            Text('Hapus Lowongan'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
+              ),
+              const SizedBox(height: 10),
+              const Divider(height: 1),
+              const SizedBox(height: 10),
+              // Applicants row
+              InkWell(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => PelamarScreen(
+                      jobId: jobId,
+                      jobTitle: job['title'] ?? 'Lowongan',
+                    ),
+                  ),
+                ),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: hasNew ? Colors.deepPurple.shade50 : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.people_outline,
+                        size: 18,
+                        color: hasNew ? Colors.deepPurple : Colors.grey,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        count == 0
+                            ? 'Belum ada pelamar'
+                            : '$count pelamar',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: hasNew ? Colors.deepPurple : Colors.grey,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        'Lihat Semua',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: hasNew ? Colors.deepPurple : Colors.grey,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.chevron_right,
+                        size: 16,
+                        color: hasNew ? Colors.deepPurple : Colors.grey,
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),

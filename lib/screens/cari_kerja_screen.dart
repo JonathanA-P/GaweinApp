@@ -11,6 +11,22 @@ class CariKerjaScreen extends StatefulWidget {
 
 class _CariKerjaScreenState extends State<CariKerjaScreen> {
   final _supabase = Supabase.instance.client;
+  late Future<List<Map<String, dynamic>>> _jobsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadJobs();
+  }
+
+  void _loadJobs() {
+    setState(() {
+      _jobsFuture = _supabase
+          .from('jobs')
+          .select()
+          .order('created_at', ascending: false);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,9 +36,10 @@ class _CariKerjaScreenState extends State<CariKerjaScreen> {
         backgroundColor: Colors.deepPurple,
         foregroundColor: Colors.white,
       ),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        // Mengambil SEMUA data dari tabel 'jobs'
-        future: _supabase.from('jobs').select().order('created_at', ascending: false),
+      body: RefreshIndicator(
+        onRefresh: () async => _loadJobs(),
+        child: FutureBuilder<List<Map<String, dynamic>>>(
+        future: _jobsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -60,7 +77,6 @@ class _CariKerjaScreenState extends State<CariKerjaScreen> {
                   ),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                   onTap: () {
-                    // Pindah ke halaman detail saat di-klik
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -73,6 +89,7 @@ class _CariKerjaScreenState extends State<CariKerjaScreen> {
             },
           );
         },
+      ),
       ),
     );
   }

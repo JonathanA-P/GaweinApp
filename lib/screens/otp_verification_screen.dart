@@ -101,12 +101,12 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
             const Icon(Icons.mark_email_read_outlined, size: 64, color: Colors.deepPurple),
             const SizedBox(height: 16),
             const Text(
-              'OTP Verification',
+              'Verifikasi Kode',
               style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
-              'Enter the verification code we sent to\n${widget.email}',
+              'Masukkan kode 6 digit yang dikirim ke:\n${widget.email}',
               style: const TextStyle(color: Colors.grey, height: 1.5),
             ),
             const SizedBox(height: 32),
@@ -140,7 +140,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 onPressed: _isLoading ? null : _verifyOtp,
                 child: _isLoading
                     ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('Verify', style: TextStyle(color: Colors.white, fontSize: 16)),
+                    : const Text('Verifikasi', style: TextStyle(color: Colors.white, fontSize: 16)),
               ),
             ),
             const SizedBox(height: 16),
@@ -148,7 +148,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
               child: TextButton(
                 onPressed: _resendCode,
                 child: const Text(
-                  "Didn't receive code? Resend",
+                  'Tidak menerima kode? Kirim ulang',
                   style: TextStyle(color: Colors.deepPurple),
                 ),
               ),

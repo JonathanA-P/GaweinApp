@@ -93,7 +93,7 @@ class _PilihPeranScreenState extends State<PilihPeranScreen> {
                         child: _buildRoleCard(
                           title: 'Pelamar',
                           desc: 'Siap Bekerja',
-                          image: 'assets/images/Pelamar.png',
+                          image: 'assets/images/Pekerja.png',
                           onTap: () => _updateRole('pencari_kerja'),
                         ),
                       ),

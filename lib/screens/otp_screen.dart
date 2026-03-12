@@ -46,7 +46,30 @@ class _OtpScreenState extends State<OtpScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('OTP Salah / Kadaluarsa: $e'), backgroundColor: Colors.red));
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _resendOtp() async {
+    try {
+      await _supabase.auth.resend(
+        type: OtpType.signup,
+        email: widget.email,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Kode OTP baru telah dikirim'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal kirim ulang: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -70,7 +93,7 @@ class _OtpScreenState extends State<OtpScreen> {
               maxLength: 6,
               style: const TextStyle(fontSize: 24, letterSpacing: 8),
               decoration: const InputDecoration(
-                hintText: '000000',
+                hintText: 'Masukkan Kode OTP',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -84,6 +107,16 @@ class _OtpScreenState extends State<OtpScreen> {
                 child: _isLoading 
                     ? const CircularProgressIndicator(color: Colors.white)
                     : const Text('Verifikasi OTP', style: TextStyle(color: Colors.white, fontSize: 16)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Center(
+              child: TextButton(
+                onPressed: _resendOtp,
+                child: const Text(
+                  'Tidak menerima kode? Kirim ulang',
+                  style: TextStyle(color: Colors.deepPurple),
+                ),
               ),
             ),
           ],

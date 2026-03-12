@@ -34,12 +34,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Kode OTP telah dikirim ke email Anda'),
-            backgroundColor: Colors.green,
-          ),
-        );
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -82,12 +76,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             const Icon(Icons.lock_reset, size: 64, color: Colors.deepPurple),
             const SizedBox(height: 16),
             const Text(
-              'Forgot Password?',
+              'Lupa Password?',
               style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             const Text(
-              'Enter the email address linked with your account. We will send you a reset code.',
+              'Masukkan email akun Anda. Kami akan mengirimkan kode 6 digit ke email tersebut.',
               style: TextStyle(color: Colors.grey, height: 1.5),
             ),
             const SizedBox(height: 32),
@@ -96,7 +90,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
                 labelText: 'Email',
-                hintText: 'Enter your email',
+                hintText: 'Masukkan email Anda',
                 prefixIcon: const Icon(Icons.email_outlined),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 filled: true,
@@ -115,7 +109,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 onPressed: _isLoading ? null : _sendResetEmail,
                 child: _isLoading
                     ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('Send Code', style: TextStyle(color: Colors.white, fontSize: 16)),
+                    : const Text('Kirim Kode', style: TextStyle(color: Colors.white, fontSize: 16)),
               ),
             ),
           ],

@@ -15,6 +15,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _nikController = TextEditingController();
   final TextEditingController _dobController = TextEditingController();
+  final TextEditingController _bioController = TextEditingController();
   String? _avatarUrl;
 
   bool isLoading = true;
@@ -31,6 +32,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
     _emailController.dispose();
     _nikController.dispose();
     _dobController.dispose();
+    _bioController.dispose();
     super.dispose();
   }
 
@@ -56,6 +58,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
         _emailController.text = user.email ?? '';
         _nikController.text = data['nik'] ?? '';
         _dobController.text = data['tanggal_lahir'] ?? '';
+        _bioController.text = data['bio'] ?? '';
         _avatarUrl = data['avatar_url'] as String?;
       }
     } catch (e) {
@@ -147,6 +150,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
         'full_name': _namaController.text,
         'nik': _nikController.text,
         'tanggal_lahir': _dobController.text,
+        'bio': _bioController.text,
       }).eq('id', user.id);
 
       if (mounted) {
@@ -209,6 +213,18 @@ class _ProfilScreenState extends State<ProfilScreen> {
                   _buildTextField('Email', _emailController, enabled: false),
                   const SizedBox(height: 16),
                   _buildTextField('NIK', _nikController),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _bioController,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      labelText: 'Bio / Tentang Saya',
+                      alignLabelWithHint: true,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   _buildDateField(),
                   const SizedBox(height: 32),

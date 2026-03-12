@@ -5,15 +5,12 @@ import 'profil_screen.dart';
 import 'kursus_scren.dart';
 import 'komunitas_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:gawein/screens/tambah_lowongan_screen.dart';
 import 'package:gawein/screens/detail_lowongan_screen.dart';
 import 'package:gawein/screens/home_rekruiter_screen.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:convex_bottom_bar/convex_bottom_bar.dart';
 import 'package:gawein/widgets/custom_navbar.dart';
-import 'package:gawein/widgets/worker_navbar.dart';
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -23,7 +20,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
-  String? _role;
   String _fullName = 'User GaweIn';
   String? _avatarUrl;
   bool _isLoading = true;
@@ -32,9 +28,32 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<List<dynamic>>? _coursesFuture;
 
   void _onItemTapped(int index) {
+    if (index == 0 && _selectedIndex == 4) {
+      // Returning from ProfilScreen — refresh name & avatar
+      _refreshProfileData();
+    }
     setState(() {
       _selectedIndex = index;
     });
+  }
+
+  Future<void> _refreshProfileData() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    try {
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select('full_name, avatar_url')
+          .eq('id', user.id)
+          .maybeSingle();
+      if (!mounted) return;
+      setState(() {
+        _fullName = (data?['full_name'] as String?)?.isNotEmpty == true
+            ? data!['full_name']
+            : (user.userMetadata?['full_name'] as String?) ?? 'User GaweIn';
+        _avatarUrl = data?['avatar_url'] as String?;
+      });
+    } catch (_) {}
   }
 
   @override
@@ -80,7 +99,6 @@ Future<void> _checkUserRole() async {
       }
 
       setState(() {
-        _role = role;
         _fullName = (data?['full_name'] as String?)?.isNotEmpty == true
             ? data!['full_name']
             : (user.userMetadata?['full_name'] as String?) ?? 'User GaweIn';
@@ -94,43 +112,63 @@ Future<void> _checkUserRole() async {
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
+    if (hour < 12) return 'Selamat Pagi';
+    if (hour < 15) return 'Selamat Siang';
+    if (hour < 18) return 'Selamat Sore';
+    return 'Selamat Malam';
   }
 
+  Map<String, dynamic> _staticCourseItem(String videoId, String title, String channelTitle) => {
+    'id': {'videoId': videoId},
+    'snippet': {
+      'title': title,
+      'channelTitle': channelTitle,
+      'thumbnails': {
+        'high': {'url': 'https://img.youtube.com/vi/$videoId/hqdefault.jpg'},
+        'default': {'url': 'https://img.youtube.com/vi/$videoId/default.jpg'},
+      },
+    },
+  };
+
   Future<List<dynamic>> _fetchYouTubeCourses() async {
+    final fallback = [
+      _staticCourseItem('2AP4Tnp6FZw', 'Belajar Java OOP - Class & Object', 'Programmer Zaman Now'),
+      _staticCourseItem('GwIo3gDZCVQ', 'Machine Learning untuk Pemula Indonesia', 'DQLab'),
+      _staticCourseItem('7eh4d9ejTKY', 'Python untuk Data Science Indonesia', 'Kelas Terbuka'),
+    ];
     final apiKey = dotenv.env['YOUTUBE_API_KEY'] ?? '';
-    if (apiKey.isEmpty) return [];
+    if (apiKey.isEmpty) return fallback;
     final url =
         'https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=5&q=tutorial+pemrograman+kerja+indonesia&type=video&key=$apiKey';
     try {
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return data['items'] ?? [];
+        final items = data['items'] as List? ?? [];
+        if (items.isNotEmpty) return items;
       }
+      debugPrint('YouTube home fallback (status ${response.statusCode})');
     } catch (e) {
       debugPrint('Error fetch YouTube: $e');
     }
-    return [];
+    return fallback;
   }
 
 @override
 Widget build(BuildContext context) {
-  // Daftar halaman untuk Bottom Navigation
-  final List<Widget> _pages = [
-    _buildHomeContent(), // Index 0: Beranda
-    const CariKerjaScreen(), // Index 1: Loker
-    const KursusScreen(), // Index 2: Kursus
-    const KomunitasScreen(), // Index 3: Komunitas
-    const ProfilScreen(), // Index 4: Profil
-  ];
-
   return Scaffold(
     backgroundColor: Colors.grey[50],
     body: SafeArea(
-      child: _pages[_selectedIndex],
+      child: IndexedStack(
+        index: _selectedIndex,
+        children: [
+          _buildHomeContent(),
+          const CariKerjaScreen(),
+          const KursusScreen(),
+          const KomunitasScreen(),
+          const ProfilScreen(),
+        ],
+      ),
     ),
     bottomNavigationBar: CustomNavbar(
   selectedIndex: _selectedIndex,
@@ -157,11 +195,6 @@ Widget build(BuildContext context) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    // Show recruiter content if role is perekrut
-    if (_role == 'perekrut') {
-      return _buildPerekrutContent();
-    }
-
     // Default content for job seekers
     return SingleChildScrollView(
       child: Column(
@@ -169,13 +202,16 @@ Widget build(BuildContext context) {
         children: [
           _buildProfileHeader(),
           const SizedBox(height: 24),
-          _buildSectionTitle('Thread Komunitas Terbaru'),
+          _buildSectionTitle('Thread Komunitas Terbaru',
+              onSeeAll: () => setState(() => _selectedIndex = 3)),
           _buildCommunityThreads(),
           const SizedBox(height: 24),
-          _buildSectionTitle('Rekomendasi Pekerjaan'),
+          _buildSectionTitle('Rekomendasi Pekerjaan',
+              onSeeAll: () => setState(() => _selectedIndex = 1)),
           _buildJobRecommendations(),
           const SizedBox(height: 24),
-          _buildSectionTitle('Rekomendasi Course'),
+          _buildSectionTitle('Rekomendasi Course',
+              onSeeAll: () => setState(() => _selectedIndex = 2)),
           _buildCourseRecommendations(),
           const SizedBox(height: 32),
         ],
@@ -244,7 +280,7 @@ Widget build(BuildContext context) {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
+  Widget _buildSectionTitle(String title, {VoidCallback? onSeeAll}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24.0),
       child: Row(
@@ -254,10 +290,13 @@ Widget build(BuildContext context) {
               style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold)),
-          const Text('See All',
-              style: TextStyle(
-                  color: Colors.deepPurple,
-                  fontWeight: FontWeight.w600)),
+          GestureDetector(
+            onTap: onSeeAll,
+            child: const Text('See All',
+                style: TextStyle(
+                    color: Colors.deepPurple,
+                    fontWeight: FontWeight.w600)),
+          ),
         ],
       ),
     );
@@ -302,26 +341,31 @@ Widget build(BuildContext context) {
   }
 
   Widget _communityCard(String title, String subtitle, Color color) {
-    return Container(
-      width: 280,
-      margin: const EdgeInsets.symmetric(horizontal: 8.0),
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(16)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(title,
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16)),
-          const SizedBox(height: 8),
-          Text(subtitle,
-              style: TextStyle(
-                  color: Colors.black.withOpacity(0.6))),
-        ],
+    return GestureDetector(
+      onTap: () => setState(() => _selectedIndex = 3),
+      child: Container(
+        width: 280,
+        margin: const EdgeInsets.symmetric(horizontal: 8.0),
+        padding: const EdgeInsets.all(16.0),
+        decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(16)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(title,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16)),
+            const SizedBox(height: 8),
+            Text(subtitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: Colors.black.withOpacity(0.6))),
+          ],
+        ),
       ),
     );
   }
@@ -424,7 +468,7 @@ Widget build(BuildContext context) {
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
-              child: const Text('Apply Now'),
+              child: const Text('Lamar Sekarang'),
             ),
           )
         ],
@@ -442,28 +486,35 @@ Widget build(BuildContext context) {
             return const Center(child: CircularProgressIndicator());
           }
           final courses = snapshot.data ?? [];
-          if (courses.isEmpty) {
-            return Column(
-              children: [
-                _courseListTile('Java OOP Masterclass', 'Belajar fundamental PBO', Icons.code, null),
-                const SizedBox(height: 12),
-                _courseListTile('AI/ML Engineering Basics', 'Pengenalan Machine Learning', Icons.memory, null),
-              ],
-            );
-          }
+          final displayCourses = courses.isEmpty
+              ? [
+                  _staticCourseItem('2AP4Tnp6FZw', 'Belajar Java OOP - Class & Object', 'Programmer Zaman Now'),
+                  _staticCourseItem('GwIo3gDZCVQ', 'Machine Learning untuk Pemula Indonesia', 'DQLab'),
+                  _staticCourseItem('7eh4d9ejTKY', 'Python untuk Data Science Indonesia', 'Kelas Terbuka'),
+                ]
+              : courses;
           return Column(
             children: List.generate(
-              courses.length > 3 ? 3 : courses.length,
+              displayCourses.length > 3 ? 3 : displayCourses.length,
               (index) {
-                final item = courses[index] as Map<String, dynamic>;
+                final item = displayCourses[index] as Map<String, dynamic>;
                 final snippet = item['snippet'] as Map<String, dynamic>;
                 final videoId = (item['id'] as Map<String, dynamic>?)?['videoId'] as String? ?? '';
                 final title = snippet['title'].toString().replaceAll('&quot;', '"').replaceAll('&#39;', "'");
                 final channel = snippet['channelTitle'] as String? ?? '';
-                final youtubeUrl = videoId.isNotEmpty ? 'https://www.youtube.com/watch?v=$videoId' : null;
+                final thumbnailUrl = (snippet['thumbnails']?['high']?['url'] ??
+                    snippet['thumbnails']?['default']?['url']) as String?;
+                final youtubeUrl = videoId.isNotEmpty
+                    ? 'https://www.youtube.com/watch?v=$videoId'
+                    : null;
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  child: _courseListTile(title, channel, Icons.play_circle_outline, youtubeUrl),
+                  child: _courseListTile(
+                    title: title,
+                    subtitle: channel,
+                    thumbnailUrl: thumbnailUrl,
+                    youtubeUrl: youtubeUrl,
+                  ),
                 );
               },
             ),
@@ -473,7 +524,12 @@ Widget build(BuildContext context) {
     );
   }
 
-  Widget _courseListTile(String title, String subtitle, IconData icon, String? youtubeUrl) {
+  Widget _courseListTile({
+    required String title,
+    required String subtitle,
+    String? thumbnailUrl,
+    String? youtubeUrl,
+  }) {
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: youtubeUrl != null
@@ -488,73 +544,43 @@ Widget build(BuildContext context) {
         ),
         child: Row(
           children: [
-            Container(
-              height: 60,
-              width: 60,
-              decoration: BoxDecoration(color: Colors.deepPurple.shade50, borderRadius: BorderRadius.circular(8)),
-              child: Icon(icon, color: Colors.deepPurple, size: 30),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: thumbnailUrl != null
+                  ? Image.network(
+                      thumbnailUrl,
+                      height: 60,
+                      width: 80,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _courseThumbnailPlaceholder(),
+                    )
+                  : _courseThumbnailPlaceholder(),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), maxLines: 2, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 4),
-                  Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
                 ],
               ),
             ),
-            Icon(
-              youtubeUrl != null ? Icons.play_circle_outline : Icons.arrow_forward_ios,
-              size: youtubeUrl != null ? 24 : 16,
-              color: youtubeUrl != null ? Colors.red : Colors.grey,
-            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.play_circle_outline, size: 28, color: Colors.red),
           ],
         ),
       ),
     );
   }
-  // Fungsi ini wajib ada agar error merah di gambar {5F16B24B-B692-4B63-9CA7-367CD466EDA5} hilang
-Widget _buildPerekrutContent() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Text(
-            'Selamat Datang Perekrut!\nKelola lowongan Anda di sini.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 24), // Jarak antara teks dan tombol
-          
-          // --- INI TOMBOL BARUNYA ---
-          ElevatedButton.icon(
-            onPressed: () {
-              // Fungsi untuk pindah ke halaman TambahLowonganScreen
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const TambahLowonganScreen(),
-                ),
-              );
-            },
-            icon: const Icon(Icons.add, color: Colors.white),
-            label: const Text(
-              'Tambah Lowongan Pekerjaan',
-              style: TextStyle(color: Colors.white),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.deepPurple, // Warna tombol
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-        ],
-      ),
+
+  Widget _courseThumbnailPlaceholder() {
+    return Container(
+      height: 60,
+      width: 80,
+      decoration: BoxDecoration(color: Colors.deepPurple.shade50),
+      child: const Icon(Icons.play_circle_outline, color: Colors.deepPurple, size: 30),
     );
   }
-  
 }

@@ -18,6 +18,10 @@ class _KursusScreenState extends State<KursusScreen> {
   List<dynamic> _myCourses = [];
   List<dynamic> _popularCourses = [];
   bool _isLoading = true;
+  bool _isUsingFallback = false;
+  String _searchQuery = '';
+  String _selectedCategory = 'All Course';
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -25,8 +29,15 @@ class _KursusScreenState extends State<KursusScreen> {
     _loadAllCourses();
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   // Fungsi untuk memuat kedua daftar kursus secara bersamaan
   Future<void> _loadAllCourses() async {
+    if (mounted) setState(() { _isLoading = true; _isUsingFallback = false; });
     // Mencari video dengan kata kunci berbeda untuk 2 section
     final myCoursesData = await _fetchYouTubeVideos('tutorial java oop bahasa indonesia', 5);
     final popularCoursesData = await _fetchYouTubeVideos('tutorial machine learning pemula indonesia', 10);
@@ -40,22 +51,64 @@ class _KursusScreenState extends State<KursusScreen> {
     }
   }
 
-  // Fungsi utama untuk menarik data dari YouTube API
+  // Helper: buat item video dalam format YouTube API response
+  Map<String, dynamic> _staticVideoItem(String videoId, String title, String channelTitle) => {
+    'id': {'videoId': videoId},
+    'snippet': {
+      'title': title,
+      'channelTitle': channelTitle,
+      'thumbnails': {
+        'high': {'url': 'https://img.youtube.com/vi/$videoId/hqdefault.jpg'},
+        'default': {'url': 'https://img.youtube.com/vi/$videoId/default.jpg'},
+      },
+    },
+  };
+
+  // Data statis kursus Java OOP
+  List<Map<String, dynamic>> _getStaticJavaCourses() => [
+    _staticVideoItem('2AP4Tnp6FZw', 'Belajar Java OOP - Pengenalan Class & Object', 'Programmer Zaman Now'),
+    _staticVideoItem('h1JA2iMtqn4', 'Java OOP - Inheritance (Pewarisan)', 'Programmer Zaman Now'),
+    _staticVideoItem('fkSqO8RNKW4', 'Java OOP - Polymorphism Indonesia', 'Kelas Terbuka'),
+    _staticVideoItem('NU_1StN5Tkk', 'Java Interface dan Abstract Class', 'Kelas Terbuka'),
+    _staticVideoItem('3RhZUtMwZJ8', 'Belajar Design Pattern Java Indonesia', 'Programmer Zaman Now'),
+  ];
+
+  // Data statis kursus Machine Learning
+  List<Map<String, dynamic>> _getStaticMlCourses() => [
+    _staticVideoItem('GwIo3gDZCVQ', 'Belajar Machine Learning - Pengenalan', 'DQLab'),
+    _staticVideoItem('7eh4d9ejTKY', 'Machine Learning dengan Python - Pemula', 'Kelas Terbuka'),
+    _staticVideoItem('IpGxLWOIZy4', 'Tutorial Scikit-Learn Python Indonesia', 'Indonesia Belajar'),
+    _staticVideoItem('VkdkJnB9Ldc', 'Deep Learning - Neural Network Indonesia', 'Programmer Zaman Now'),
+    _staticVideoItem('aircAruvnKk', 'Cara Kerja Neural Network (Animasi)', '3Blue1Brown'),
+    _staticVideoItem('9yl6-HEY7_s', 'Machine Learning Project Lengkap', 'DQLab'),
+    _staticVideoItem('rfscVS0vtbw', 'Machine Learning Python Full Course', 'freeCodeCamp'),
+    _staticVideoItem('tPYj3fFJGjk', 'TensorFlow Tutorial Indonesia', 'Build With AI'),
+    _staticVideoItem('HGwBXDKFk9I', 'Data Science untuk Karir Indonesia', 'Indonesia AI'),
+    _staticVideoItem('vmEHCJofslg', 'Logistic Regression & Classification ML', 'Programmer Zaman Now'),
+  ];
+
+  // Ambil data dari YouTube API; jika gagal (termasuk quota habis), gunakan data statis
   Future<List<dynamic>> _fetchYouTubeVideos(String query, int maxResults) async {
-    final url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=$maxResults&q=$query&type=video&key=$apiKey';
-    
+    final fallback = query.contains('java') ? _getStaticJavaCourses() : _getStaticMlCourses();
+    if (apiKey.isEmpty) {
+      if (mounted) setState(() => _isUsingFallback = true);
+      return fallback;
+    }
+    final url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=$maxResults&q=${Uri.encodeComponent(query)}&type=video&key=$apiKey';
     try {
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return data['items'];
-      } else {
-        debugPrint('Gagal memuat YouTube: ${response.statusCode}');
+        final items = data['items'] as List? ?? [];
+        if (items.isNotEmpty) return items;
       }
+      debugPrint('YouTube API fallback (status ${response.statusCode})');
+      if (mounted) setState(() => _isUsingFallback = true);
     } catch (e) {
       debugPrint('Error fetch YouTube: $e');
+      if (mounted) setState(() => _isUsingFallback = true);
     }
-    return []; 
+    return fallback;
   }
 
   @override
@@ -98,11 +151,44 @@ class _KursusScreenState extends State<KursusScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (_isUsingFallback)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline, color: Colors.orange.shade700, size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Menampilkan konten rekomendasi (kuota API YouTube habis)',
+                                style: TextStyle(color: Colors.orange.shade700, fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     // Search Bar
                     TextField(
+                      controller: _searchController,
+                      onChanged: (value) => setState(() => _searchQuery = value.toLowerCase()),
                       decoration: InputDecoration(
-                        hintText: 'Search for any course...',
+                        hintText: 'Cari kursus...',
                         prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, color: Colors.grey),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                              )
+                            : null,
                         filled: true,
                         fillColor: Colors.white,
                         border: OutlineInputBorder(
@@ -122,10 +208,10 @@ class _KursusScreenState extends State<KursusScreen> {
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         children: [
-                          _buildCategoryChip('All Course', true),
-                          _buildCategoryChip('Java', false),
-                          _buildCategoryChip('Python', false),
-                          _buildCategoryChip('AI/ML', false),
+                          _buildCategoryChip('All Course'),
+                          _buildCategoryChip('Java'),
+                          _buildCategoryChip('Python'),
+                          _buildCategoryChip('AI/ML'),
                         ],
                       ),
                     ),
@@ -133,49 +219,59 @@ class _KursusScreenState extends State<KursusScreen> {
 
                     // Bagian Lanjutkan Belajar (My Course)
                     const Text(
-                      'Lanjutkan Belajar',
+                      'Kursus Java & OOP',
                       style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 16),
-                    SizedBox(
-                      height: 200,
-                      child: _myCourses.isEmpty 
-                          ? const Center(child: Text('Tidak ada video ditemukan / API Key belum diatur'))
-                          : ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: _myCourses.length,
-                              itemBuilder: (context, index) {
-                                return _buildMyCourseCard(_myCourses[index]);
-                              },
-                            ),
-                    ),
+                    Builder(builder: (context) {
+                      final filtered = _filterCourses(_myCourses);
+                      return SizedBox(
+                        height: 200,
+                        child: _myCourses.isEmpty
+                            ? _buildInlineError()
+                            : filtered.isEmpty
+                                ? Center(
+                                    child: Text(
+                                      'Tidak ada hasil untuk "$_searchQuery"',
+                                      style: const TextStyle(color: Colors.grey, fontSize: 13),
+                                    ),
+                                  )
+                                : ListView.builder(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: filtered.length,
+                                    itemBuilder: (context, index) => _buildMyCourseCard(filtered[index]),
+                                  ),
+                      );
+                    }),
                     const SizedBox(height: 32),
 
                     // Bagian Popular Course
-                    const Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Kursus Populer',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                          'See All',
-                          style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.w600),
-                        ),
-                      ],
+                    const Text(
+                      'Kursus Populer',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 16),
-                    _popularCourses.isEmpty
-                        ? const Center(child: Text('Tidak ada video ditemukan / API Key belum diatur'))
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _popularCourses.length,
-                            itemBuilder: (context, index) {
-                              return _buildPopularCourseTile(_popularCourses[index]);
-                            },
-                          ),
+                    Builder(builder: (context) {
+                      final filtered = _filterCourses(_popularCourses);
+                      return _popularCourses.isEmpty
+                          ? _buildInlineError()
+                          : filtered.isEmpty
+                              ? Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Center(
+                                    child: Text(
+                                      'Tidak ada hasil untuk "$_searchQuery"',
+                                      style: const TextStyle(color: Colors.grey),
+                                    ),
+                                  ),
+                                )
+                              : ListView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: filtered.length,
+                                  itemBuilder: (context, index) => _buildPopularCourseTile(filtered[index]),
+                                );
+                    }),
                   ],
                 ),
               ),
@@ -183,23 +279,72 @@ class _KursusScreenState extends State<KursusScreen> {
     );
   }
 
-  // Filter Chip Category
-  Widget _buildCategoryChip(String label, bool isSelected) {
-    return Container(
-      margin: const EdgeInsets.only(right: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      decoration: BoxDecoration(
-        color: isSelected ? Colors.deepPurple : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isSelected ? Colors.deepPurple : Colors.grey.shade300,
-        ),
+  // Error widget kecil untuk ditampilkan di dalam section
+  Widget _buildInlineError() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 32),
+          const SizedBox(height: 8),
+          const Text(
+            'Tidak ada video ditemukan',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey, fontSize: 12),
+          ),
+          TextButton.icon(
+            onPressed: _loadAllCourses,
+            icon: const Icon(Icons.refresh, size: 16),
+            label: const Text('Retry'),
+          ),
+        ],
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: isSelected ? Colors.white : Colors.grey.shade700,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+    );
+  }
+
+  List<dynamic> _filterCourses(List<dynamic> courses) {
+    return courses.where((item) {
+      final snippet = (item['snippet'] as Map? ?? {});
+      final title = (snippet['title'] as String? ?? '').toLowerCase();
+      final channel = (snippet['channelTitle'] as String? ?? '').toLowerCase();
+      final matchesSearch = _searchQuery.isEmpty ||
+          title.contains(_searchQuery) ||
+          channel.contains(_searchQuery);
+      final matchesCategory = _selectedCategory == 'All Course' ||
+          (_selectedCategory == 'Java' &&
+              (title.contains('java') || channel.contains('java'))) ||
+          (_selectedCategory == 'Python' &&
+              (title.contains('python') || channel.contains('python'))) ||
+          (_selectedCategory == 'AI/ML' &&
+              (title.contains('machine') || title.contains('learning') ||
+                  title.contains('neural') || title.contains('tensorflow') ||
+                  title.contains('scikit') || title.contains('data') ||
+                  title.contains(' ai ') || title.contains('ml ')));
+      return matchesSearch && matchesCategory;
+    }).toList();
+  }
+
+  // Filter Chip Category
+  Widget _buildCategoryChip(String label) {
+    final isSelected = _selectedCategory == label;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedCategory = label),
+      child: Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.deepPurple : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? Colors.deepPurple : Colors.grey.shade300,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.grey.shade700,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
         ),
       ),
     );
