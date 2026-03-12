@@ -52,7 +52,10 @@ class _PilihPeranScreenState extends State<PilihPeranScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal menyimpan peran: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Gagal menyimpan peran: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -66,34 +69,46 @@ class _PilihPeranScreenState extends State<PilihPeranScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Padding(
-              padding: const EdgeInsets.all(24.0),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.person_pin, size: 64, color: Colors.deepPurple),
-                  const SizedBox(height: 16),
                   const Text(
                     'Pilih Peran Anda',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   const Text(
                     'Sesuaikan pengalaman Anda di GaweIn',
                     style: TextStyle(color: Colors.grey),
                   ),
                   const SizedBox(height: 40),
-                  _buildRoleCard(
-                    title: 'Pencari Kerja',
-                    desc: 'Saya ingin mencari lowongan pekerjaan terbaik.',
-                    icon: Icons.person_search,
-                    onTap: () => _updateRole('pencari_kerja'),
-                  ),
-                  const SizedBox(height: 20),
-                  _buildRoleCard(
-                    title: 'Perekrut / Perusahaan',
-                    desc: 'Saya ingin mencari talenta untuk perusahaan.',
-                    icon: Icons.business_center,
-                    onTap: () => _updateRole('perekrut'),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildRoleCard(
+                          title: 'Pelamar',
+                          desc: 'Siap Bekerja',
+                          image: 'assets/images/Pelamar.png',
+                          onTap: () => _updateRole('pencari_kerja'),
+                        ),
+                      ),
+
+                      const SizedBox(width: 16),
+
+                      Expanded(
+                        child: _buildRoleCard(
+                          title: 'Pemilik Usaha',
+                          desc : 'Pemberi Lowongan Kerja',
+                          image: 'assets/images/Pemilik_Usaha.png',
+                          onTap: () => _updateRole('perekrut'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -104,44 +119,53 @@ class _PilihPeranScreenState extends State<PilihPeranScreen> {
   Widget _buildRoleCard({
     required String title,
     required String desc,
-    required IconData icon,
+    required String image,
     required VoidCallback onTap,
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(20),
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.deepPurple.shade100),
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(20),
           boxShadow: [
-            BoxShadow(color: Colors.deepPurple.withOpacity(0.08), blurRadius: 15, offset: const Offset(0, 5))
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            )
           ],
         ),
-        child: Row(
+        child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.deepPurple.shade50,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: Colors.deepPurple, size: 32),
+            Image.asset(
+              image,
+              height: 110,
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Text(desc, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-                ],
+
+            const SizedBox(height: 16),
+
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            const Icon(Icons.arrow_forward_ios, color: Colors.deepPurple, size: 16),
+
+            const SizedBox(height: 6),
+
+            Text(
+              desc,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Colors.grey,
+              ),
+            ),
           ],
         ),
       ),

@@ -443,7 +443,9 @@ class _HomeRekruiterScreenState extends State<HomeRekruiterScreen> {
   Widget _buildNavIcon(String asset, int index) {
   bool isSelected = _selectedIndex == index;
 
-  return Container(
+  return AnimatedContainer(
+    duration: const Duration(milliseconds: 250),
+    transform: Matrix4.translationValues(0, isSelected ? -10 : 0, 0),
     padding: const EdgeInsets.all(10),
     decoration: BoxDecoration(
       color: isSelected ? Colors.deepPurple : Colors.transparent,

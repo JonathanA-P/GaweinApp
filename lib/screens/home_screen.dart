@@ -188,12 +188,19 @@ Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(24.0),
       decoration: const BoxDecoration(
-        color: Color(0xFF1E1B3A),
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(30),
-          bottomRight: Radius.circular(30),
-        ),
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,    // Mulai dari atas
+        end: Alignment.bottomCenter,   // Sampai bawah
+        colors: [
+          Color(0xFF5B3FA6), // Warna tua (atas)
+          Color(0xFFE7E3F6), // Warna muda (bawah)
+        ],
       ),
+      borderRadius: BorderRadius.only(
+        bottomLeft: Radius.circular(30),
+        bottomRight: Radius.circular(30),
+      ),
+    ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
