@@ -11,7 +11,9 @@ import 'package:gawein/screens/home_rekruiter_screen.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:url_launcher/url_launcher.dart';
-
+import 'package:convex_bottom_bar/convex_bottom_bar.dart';
+import 'package:gawein/widgets/custom_navbar.dart';
+import 'package:gawein/widgets/worker_navbar.dart';
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -115,38 +117,41 @@ Future<void> _checkUserRole() async {
   }
 
 @override
-  Widget build(BuildContext context) {
-    // INI YANG BARU: Daftar halaman untuk Bottom Navigation
-    final List<Widget> _pages = [
-      _buildHomeContent(), // Index 0: Beranda
-      const CariKerjaScreen(), // Index 1: Halaman Cari Kerja yang baru kita buat
-      const KursusScreen(), // Index 2: Placeholder Course
-      const KomunitasScreen(), // Index 3: Placeholder Komunitas
-      const ProfilScreen(),
-    ];
+Widget build(BuildContext context) {
+  // Daftar halaman untuk Bottom Navigation
+  final List<Widget> _pages = [
+    _buildHomeContent(), // Index 0: Beranda
+    const CariKerjaScreen(), // Index 1: Loker
+    const KursusScreen(), // Index 2: Kursus
+    const KomunitasScreen(), // Index 3: Komunitas
+    const ProfilScreen(), // Index 4: Profil
+  ];
 
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      body: SafeArea(
-        child: _pages[_selectedIndex],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
-        selectedItemColor: Colors.deepPurple,
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.work_outline), label: 'Cari Kerja'),
-          BottomNavigationBarItem(icon: Icon(Icons.book_outlined), label: 'Course'),
-          BottomNavigationBarItem(icon: Icon(Icons.people_outline), label: 'Komunitas'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profil'),
-        ],
-      ),
-    );
-  }
-
+  return Scaffold(
+    backgroundColor: Colors.grey[50],
+    body: SafeArea(
+      child: _pages[_selectedIndex],
+    ),
+    bottomNavigationBar: CustomNavbar(
+  selectedIndex: _selectedIndex,
+  onTap: _onItemTapped,
+  icons: const [
+    'assets/images/Beranda.png',
+    'assets/images/Loker.png',
+    'assets/images/Kursus.png',
+    'assets/images/Komunitas.png',
+    'assets/images/Profil.png',
+  ],
+  labels: const [
+    'Beranda',
+    'Loker',
+    'Kursus',
+    'Komunitas',
+    'Profil',
+  ],
+),
+  );
+}
   Widget _buildHomeContent() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());

@@ -13,6 +13,7 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+
   @override
   void initState() {
     super.initState();
@@ -20,7 +21,6 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkSession() async {
-    // Show splash for at least 2 seconds
     await Future.delayed(const Duration(seconds: 2));
     if (!mounted) return;
 
@@ -28,6 +28,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
     if (session != null) {
       final user = Supabase.instance.client.auth.currentUser!;
+
       try {
         final data = await Supabase.instance.client
             .from('profiles')
@@ -38,6 +39,7 @@ class _SplashScreenState extends State<SplashScreen> {
         if (!mounted) return;
 
         final role = data?['role'];
+
         if (role == 'perekrut') {
           Navigator.pushReplacement(
             context,
@@ -49,12 +51,12 @@ class _SplashScreenState extends State<SplashScreen> {
             MaterialPageRoute(builder: (_) => const HomeScreen()),
           );
         } else {
-          // Session exists but no role — incomplete onboarding
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (_) => const OnboardingScreen()),
           );
         }
+
       } catch (_) {
         if (mounted) {
           Navigator.pushReplacement(
@@ -63,6 +65,7 @@ class _SplashScreenState extends State<SplashScreen> {
           );
         }
       }
+
     } else {
       Navigator.pushReplacement(
         context,
@@ -74,37 +77,61 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.deepPurple,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                shape: BoxShape.circle,
+      body: Container(
+
+        // BACKGROUND GRADIENT
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFFE7E3F6),
+              Color(0xFF5B3FA6),
+            ],
+          ),
+        ),
+
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+
+              // LOGO IMAGE
+              Image.asset(
+                'assets/images/Logo_GaweIn.png',
+                width: 160,
               ),
-              child: const Icon(Icons.work_outline_rounded, size: 80, color: Colors.white),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'GaweIn',
-              style: TextStyle(
-                fontSize: 40,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                letterSpacing: 1.5,
+
+              const SizedBox(height: 20),
+
+              const Text(
+                'GaweIn',
+                style: TextStyle(
+                  fontSize: 34,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF2E1A47),
+                  letterSpacing: 1.2,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Temukan Peluangmu',
-              style: TextStyle(fontSize: 16, color: Colors.white70),
-            ),
-            const SizedBox(height: 48),
-            const CircularProgressIndicator(color: Colors.white54),
-          ],
+
+              const SizedBox(height: 10),
+
+              const Text(
+                'Temukan Peluangmu',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Color(0xFF3D2A5F),
+                ),
+              ),
+
+              const SizedBox(height: 40),
+
+              const CircularProgressIndicator(
+                color: Color(0xFF3D2A5F),
+                strokeWidth: 3,
+              ),
+            ],
+          ),
         ),
       ),
     );

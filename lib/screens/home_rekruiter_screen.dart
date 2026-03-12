@@ -108,17 +108,26 @@ class _HomeRekruiterScreenState extends State<HomeRekruiterScreen> {
             )
           : null,
       bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
-        selectedItemColor: Colors.deepPurple,
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Beranda'),
-          BottomNavigationBarItem(icon: Icon(Icons.work_outline), label: 'Lowongan'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profil'),
-        ],
-      ),
+  type: BottomNavigationBarType.fixed,
+  currentIndex: _selectedIndex,
+  onTap: _onItemTapped,
+  selectedItemColor: Colors.deepPurple,
+  unselectedItemColor: Colors.grey,
+  items: [
+  BottomNavigationBarItem(
+    icon: _buildNavIcon('assets/images/Beranda.png', 0),
+    label: 'Beranda',
+  ),
+  BottomNavigationBarItem(
+    icon: _buildNavIcon('assets/images/Loker.png', 1),
+    label: 'Tambah Pekerjaan',
+  ),
+  BottomNavigationBarItem(
+    icon: _buildNavIcon('assets/images/Profil.png', 2),
+    label: 'Profil',
+  ),
+],
+),
     );
   }
 
@@ -431,4 +440,20 @@ class _HomeRekruiterScreenState extends State<HomeRekruiterScreen> {
       }
     }
   }
+  Widget _buildNavIcon(String asset, int index) {
+  bool isSelected = _selectedIndex == index;
+
+  return Container(
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      color: isSelected ? Colors.deepPurple : Colors.transparent,
+      shape: BoxShape.circle,
+    ),
+    child: ImageIcon(
+      AssetImage(asset),
+      color: isSelected ? Colors.white : Colors.grey,
+      size: 24,
+    ),
+  );
+}
 }
