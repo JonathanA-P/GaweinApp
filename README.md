@@ -6,13 +6,13 @@ Aplikasi GaweIn saat ini difokuskan dan dioptimalkan untuk platform **Android**.
 
 ---
 
-## 🎯 Fitur-Fitur Aplikasi
+## Fitur-Fitur Aplikasi
 
 ### Fitur Utama (MVP)
-* **Autentikasi Pengguna [MVP]**
+* **Autentikasi Pengguna**
   - Registrasi & Login (Email & Password).
   - Lupa Password & Konfigurasi OTP/Recovery.
-* **Peran (Role) Ganda [MVP]**
+* **Peran (Role) saat register**
   - **Pencari Kerja**: Mampu melihat, mencari, dan melamar lowongan kerja.
   - **Perekrut / Perusahaan**: Mampu mempublikasikan dan mengelola lowongan kerja di perusahaan.
 * **Manajemen Lowongan [MVP]**
@@ -21,6 +21,9 @@ Aplikasi GaweIn saat ini difokuskan dan dioptimalkan untuk platform **Android**.
 * **Melamar Pekerjaan [MVP]**
   - Pencarian lowongan beserta detail (gaji, deskripsi).
   - Proses melamar kerja (Apply) secara instan.
+* **Kursus [MVP]**
+  - Menyediakan kursus yang dapat diikuti pengguna.
+ 
 
 ### Fitur Pendukung
 * **Komunitas**
@@ -35,37 +38,37 @@ Aplikasi GaweIn saat ini difokuskan dan dioptimalkan untuk platform **Android**.
 
 ---
 
-## 🛠️ Tech Stack & Platform
+## Tech Stack & Platform
 Aplikasi GaweIn dibangun menggunakan teknologi modern yang efisien:
 
 ### Frontend
 - **Framework:** Flutter (Dart)
-- **Target Platform (Cakupan):** **Android** (Dioptimalkan & 100% didukung). *Sistem dapat dikompilasikan ke iOS atau Web pada masa mendatang, namun fokus utama release saat ini adalah Android OS.*
+- **Target Platform (Cakupan):** **Android** 
 - **State Management:** BLoC (Business Logic Component) via `flutter_bloc`
 - **UI Components:** Material Design
 
 ### Backend & Database
 - **Backend-as-a-Service:** Supabase (BaaS)
-- **Database:** PostgreSQL (Melalui skema Supabase Data API)
-- **Authentication:** Supabase Auth (Email / Magic Links)
+- **Database:** Supabase Data API)
+- **Authentication:** Supabase Auth, Google oauth
 - **Storage:** Supabase Cloud Storage (untuk menyimpan Avatar, Lampiran Profile, dan Gambar Postingan)
 
 ---
 
-## 🏗️ Arsitektur Aplikasi
-Aplikasi ini diorganisasikan berdasarkan *Feature-based Folder Structure* yang dipisahkan ke dalam beberapa modul berdasarkan fungsionalitas dan layernya. Ini mempermudah skala aplikasi saat ditambahkan fitur baru di masa depan:
+##  Arsitektur Aplikasi
+Aplikasi ini diorganisasikan berdasarkan beberapa folder, yaitu
 
 ```
 lib/
  ├── blocs/        # Berisi manajemen state (seperti AuthBloc)
  ├── models/       # Data/Entity model representatif dari database (UserModel, dsb)
  ├── screens/      # View/UI Pages (Login, Home, Lowongan, Komunitas, dll)
- ├── services/     # API/Network Logic di luar Supabase client sederhana
+ ├── services/   
  ├── widgets/      # Komponen kustom yang dapat digunakan ulang (Reusable UI)
  └── main.dart     # Entry point dan inisialisasi aplikasi beserta Dependency Injection
 ```
 
-## 🚀 Panduan Memulai (Getting Started)
+## Panduan Memulai (Getting Started)
 
 1. Pastikan Anda sudah menginstal **Flutter SDK** versi terbaru.
 2. Clone repositori ini.
