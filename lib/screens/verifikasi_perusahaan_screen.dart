@@ -46,7 +46,7 @@ class _VerifikasiPerusahaanScreenState extends State<VerifikasiPerusahaanScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Selamat datang sebagai Perekrut di GaweIn! 🎉'),
+            content: Text('Selamat datang sebagai Perekrut di GaweIn! '),
             backgroundColor: Colors.green,
           ),
         );

@@ -75,7 +75,7 @@ class _DetailLowonganScreenState extends State<DetailLowonganScreen> {
           context: context,
           builder: (context) => AlertDialog(
             icon: const Icon(Icons.check_circle, color: Colors.green, size: 48),
-            title: const Text('Lamaran Terkirim! 🎉'),
+            title: const Text('Lamaran Terkirim! '),
             content: Text(
               'Anda telah berhasil melamar posisi ${widget.jobData['title']} di ${widget.jobData['company_name']}. Kami akan menghubungi Anda segera.',
             ),
@@ -243,7 +243,7 @@ class _DetailLowonganScreenState extends State<DetailLowonganScreen> {
                     child: _isApplying
                         ? const CircularProgressIndicator(color: Colors.white)
                         : Text(
-                            _alreadyApplied ? 'Sudah Dilamar ✓' : 'Apply Now',
+                            _alreadyApplied ? 'Sudah Dilamar ' : 'Apply Now',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,

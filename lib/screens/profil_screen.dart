@@ -123,7 +123,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Foto profil berhasil diperbarui! 🎉'),
+              content: Text('Foto profil berhasil diperbarui! '),
               backgroundColor: Colors.green),
         );
       }

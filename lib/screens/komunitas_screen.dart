@@ -489,10 +489,23 @@ class _KomunitasScreenState extends State<KomunitasScreen> {
     );
     if (confirmed != true) return;
     try {
+      // Hapus komentar terkait postingan ini terlebih dahulu
       await Supabase.instance.client
+          .from('community_comments')
+          .delete()
+          .eq('post_id', post['id']);
+
+      // Hapus postingan
+      final deletedPost = await Supabase.instance.client
           .from('community_posts')
           .delete()
-          .eq('id', post['id']);
+          .eq('id', post['id'])
+          .select();
+
+      if (deletedPost.isEmpty) {
+        throw Exception('Postingan tidak ditemukan atau tidak memiliki akses (mungkin karena pengaturan izin database).');
+      }
+
       if (mounted) {
         setState(() => _posts.removeWhere((p) => p['id'] == post['id']));
         ScaffoldMessenger.of(context).showSnackBar(

@@ -66,7 +66,7 @@ class _TambahLowonganScreenState extends State<TambahLowonganScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Lowongan berhasil dipublikasikan! 🚀'),
+              content: Text('Lowongan berhasil dipublikasikan! '),
               backgroundColor: Colors.green,
             ),
           );

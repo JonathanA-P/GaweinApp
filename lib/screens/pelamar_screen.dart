@@ -29,15 +29,31 @@ class _PelamarScreenState extends State<PelamarScreen> {
     });
 
     try {
-      final data = await Supabase.instance.client
+      final appsData = await Supabase.instance.client
           .from('applications')
-          .select('id, applicant_id, status, created_at, profiles(full_name, avatar_url, bio)')
+          .select('id, applicant_id, status, created_at')
           .eq('job_id', widget.jobId)
           .order('created_at', ascending: false);
 
+      List<Map<String, dynamic>> enrichedApps = [];
+      for (var app in appsData) {
+        final Map<String, dynamic> appMap = Map<String, dynamic>.from(app as Map);
+        try {
+          final profile = await Supabase.instance.client
+              .from('profiles')
+              .select('full_name, avatar_url, bio')
+              .eq('id', appMap['applicant_id'])
+              .maybeSingle();
+          appMap['profiles'] = profile;
+        } catch (_) {
+          appMap['profiles'] = null;
+        }
+        enrichedApps.add(appMap);
+      }
+
       if (mounted) {
         setState(() {
-          _applicants = List<Map<String, dynamic>>.from(data);
+          _applicants = enrichedApps;
           _isLoading = false;
         });
       }
